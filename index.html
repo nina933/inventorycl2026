@@ -463,7 +463,7 @@ async function loadData(){
     // Stocky Orders
     const byCmd={};
     pT(raw['Stocky Orders']||[]).forEach(r=>{
-      const cmd=String(r['Numéro de la commande']||'').trim();
+      const cmd=String(r['Nom du PO']||r['Numéro de la commande']||'').trim();
       const nom=String(r['Nom du produit']||r['Produit']||'').trim();
       if(!cmd||!nom||cmd.startsWith('Dernière')||cmd.startsWith('Actualisation'))return;
       if(!byCmd[cmd])byCmd[cmd]={cmd,fourn:String(r['Nom du fournisseur']||'').trim(),
