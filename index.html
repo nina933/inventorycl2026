@@ -532,9 +532,9 @@ async function loadData(){
 
 function populateFiltresFc(){
   const ff=document.getElementById('f-fc');
-  if(!ff||ff.options.length>1)return;
+  if(!ff)return;
   const fourns=[...new Set(FORECAST.map(r=>r.fourn).filter(Boolean))].sort();
-  fourns.forEach(f=>{const o=document.createElement('option');o.value=f;o.textContent=f;ff.appendChild(o);});
+  ff.innerHTML='<option value="">Tous fournisseurs</option>'+fourns.map(f=>`<option>${f}</option>`).join('');
 }
 function populateFiltres(){
   const opts='<option value="">Tous fournisseurs</option>'+FOURNISSEURS.map(f=>`<option>${f}</option>`).join('');
