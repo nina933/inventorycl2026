@@ -815,7 +815,6 @@ function rReceptions(){
           <span class="rh-f">${c.fourn}</span>
           <span class="rh-d">📅 ${c.livraison}</span>
           ${c.nouvelle_livraison&&c.nouvelle_livraison!==''?`<span class="rh-d" style="color:var(--am);font-weight:500">📅 Nouvelle date : ${c.nouvelle_livraison}</span>`:''}
-          <span class="rh-d">Commandé : ${c.date_cmd}</span>
           <span class="rh-cnt">${c.lignes.length} produit(s) · ${fmt(c.total)} unités <span id="arr${i}">▼</span></span>
         </div>
         <div class="rb" id="rb${i}">
