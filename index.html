@@ -336,7 +336,7 @@ function rForecast(){
     const stockVal=prod?fmt(prod.stock):'—';
     const stockCls=prod?sc(prod.stock):'';
     const varHtml=prod&&prod.variante?'<div class="pv">'+prod.variante+'</div>':'';
-    return '<tr><td><div class="pn">'+r.nom+'</div>'+varHtml+'</td><td style="color:var(--t2);font-size:12px">'+r.fourn+'</td><td>'+bP(r.cat)+'</td><td style="text-align:right"><span class="'+stockCls+'">'+stockVal+'</span></td>'+'
+    return '<tr><td><div class="pn">'+r.nom+'</div>'+varHtml+'</td><td style="color:var(--t2);font-size:12px">'+r.fourn+'</td><td>'+bP(r.cat)+'</td><td style="text-align:right"><span class="'+stockCls+'">'+stockVal+'</span></td>'+
       months.map(m=>{const v=r[m]||0;return v>0?'<td style="text-align:right;color:var(--gr);font-weight:500">'+fmt(v)+'</td>':'<td style="text-align:right;color:var(--t3)">—</td>';}).join('')+
       '<td style="text-align:right;font-weight:600">'+fmt(total)+'</td></tr>';
   }).join('')||'<tr><td colspan="17" style="text-align:center;padding:40px;color:var(--t3)">Aucun forecast</td></tr>';
