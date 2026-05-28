@@ -1117,8 +1117,24 @@ function clearDD(ddId,name,cb){
   if(cb)cb();
 }
 function toggleDD(id){
-  document.querySelectorAll('.dd-panel.open').forEach(p=>{if(p.closest('.dd').id!==id)p.classList.remove('open');});
-  const dd=document.getElementById(id);const panel=dd.querySelector('.dd-panel');const btn=dd.querySelector('.dd-btn');const rect=btn.getBoundingClientRect();panel.style.top=(rect.bottom+4)+'px';panel.style.left=rect.left+'px';panel.classList.toggle('open');
+  document.querySelectorAll('.dd-panel.open').forEach(p=>{
+    p.classList.remove('open');
+    const src=p.dataset.ddSrc;
+    if(src){const srcEl=document.getElementById(src);if(srcEl)srcEl.appendChild(p);}
+  });
+  const dd=document.getElementById(id);
+  let panel=dd.querySelector('.dd-panel');
+  if(!panel)panel=document.querySelector('.dd-panel[data-dd-src="'+id+'"]');
+  if(!panel)return;
+  const btn=dd.querySelector('.dd-btn');
+  const rect=btn.getBoundingClientRect();
+  panel.dataset.ddSrc=id;
+  document.body.appendChild(panel);
+  panel.style.position='fixed';
+  panel.style.top=(rect.bottom+4)+'px';
+  panel.style.left=rect.left+'px';
+  panel.style.zIndex='99999';
+  panel.classList.add('open');
 }
 function updDD(ddId,name){
   const dd=document.getElementById(ddId);if(!dd)return;
