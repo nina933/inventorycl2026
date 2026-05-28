@@ -592,7 +592,8 @@ function populateFiltres(){
   }
   const fpr=document.getElementById('f-pr');
   if(fpr){const mb=[...new Set(PROMOS.map(p=>p.marque).filter(Boolean))].sort();
-    fpr.innerHTML='<option value="">Toutes marques</option>'+mb.map(m=>`<option>${m}</option>`).join('');}
+fpr.innerHTML='<option value="">Toutes marques</option>'+mb.map(m=>`<option>${m}</option>`).join('');}
+  populateFournDD();
 }
 
 function nav(v,el){
