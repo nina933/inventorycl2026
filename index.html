@@ -1131,7 +1131,7 @@ function updDD(ddId,name){
   btn.classList.toggle('on',ch.length>0);
 }
 document.addEventListener('click',e=>{
-  if(!e.target.closest('.dd'))document.querySelectorAll('.dd-panel.open').forEach(p=>p.classList.remove('open'));
+  if(!e.target.closest('.dd')&&!e.target.closest('.dd-panel'))document.querySelectorAll('.dd-panel.open').forEach(p=>p.classList.remove('open'));
 });
 function populateFournDD(){
   [['ddl-fa','fa','rAlertes','dd-fa'],['ddl-fs','fs','rStocks','dd-fs'],
