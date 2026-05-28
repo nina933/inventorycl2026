@@ -1118,7 +1118,7 @@ function clearDD(ddId,name,cb){
 }
 function toggleDD(id){
   document.querySelectorAll('.dd-panel.open').forEach(p=>{if(p.closest('.dd').id!==id)p.classList.remove('open');});
-  document.getElementById(id).querySelector('.dd-panel').classList.toggle('open');
+  const dd=document.getElementById(id);const panel=dd.querySelector('.dd-panel');const btn=dd.querySelector('.dd-btn');const rect=btn.getBoundingClientRect();panel.style.top=(rect.bottom+4)+'px';panel.style.left=rect.left+'px';panel.classList.toggle('open');
 }
 function updDD(ddId,name){
   const dd=document.getElementById(ddId);if(!dd)return;
