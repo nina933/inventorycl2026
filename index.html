@@ -493,7 +493,7 @@ async function loadData(){
       if(!byCmd[cmd])byCmd[cmd]={cmd,fourn:String(r['Nom du fournisseur']||'').trim(),
         livraison:fmtD(r['Délai estimé de livraison']),date_cmd:fmtD(r['Date de commande']),lignes:[],total:0};
       const qty=n(r['Quantité']||1);
-const com=String(r['Commentaires']||r[9]||'').trim();
+const com=String(r['Nouvelles date de livraison']||r[9]||'').trim();
 byCmd[cmd].lignes.push({nom,variante:String(r['Nom du variant']||''),qty,livraison:fmtD(r['Délai estimé de livraison']),com});
       byCmd[cmd].total+=qty;
     });
