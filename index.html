@@ -864,53 +864,6 @@ ${l.com?`<div style="font-size:11px;color:var(--am);margin-top:3px">💬 ${l.com
     else if(stat==='active'&&prod?.statut!=='active')return false;
     return true;
   });
-  if(rf.length){
-    html+=`<div class="sh" style="margin-top:24px"><span class="st">Réceptions planifiées par semaine</span><span class="rc">${rf.length} produit(s)</span></div>`;
-    const swFrom=sw?parseInt(sw):Math.max(1,W-1);
-    const wks=[];for(let i=swFrom;i<=Math.min(52,swFrom+11);i++)wks.push(i);
-    html+=`<div class="tw"><table>
-      <thead><tr><th>Produit</th><th>Fournisseur</th><th>Cat.</th>
-      ${wks.map(i=>`<th style="text-align:center">S${String(i).padStart(2,'0')}</th>`).join('')}</tr></thead>
-      <tbody>${rf.map(r=>`<tr>
-        <td><div class="pn">${r.nom}</div></td>
-        <td style="font-size:12px;white-space:nowrap">${r.fourn||'—'}</td>
-        <td>${bP(r.cat)}</td>
-        ${wks.map(i=>{
-          const v=r.sems[i]||0;
-          if(v>0){
-            const isoWeekToDate=(yr,wk)=>{
-              const jan4=new Date(yr,0,4);
-              const day=jan4.getDay()||7;
-              const monday=new Date(jan4);
-              monday.setDate(jan4.getDate()-day+1+(wk-1)*7);
-              return monday;
-            };
-            const yr=new Date().getFullYear();
-            const wkStart=isoWeekToDate(yr,i);
-            const wkEnd=new Date(wkStart);wkEnd.setDate(wkStart.getDate()+6);
-            const matchingPO=STOCKY.flatMap(c=>c.lignes).filter(l=>{
-              if(l.nom!==r.nom)return false;
-              if(!l.livraison||l.livraison==='—')return false;
-              let d;
-              if(l.livraison.includes('/')){const p=l.livraison.split('/');d=new Date(p[2],p[1]-1,p[0]);}
-              else d=new Date(l.livraison);
-              return d>=wkStart&&d<=wkEnd;
-            });
-            const hasPO=matchingPO.length>0;
-            const qtyMatch=hasPO&&matchingPO.some(l=>l.qty===v);
-            const bg=!hasPO?'var(--reb)':qtyMatch?'var(--blb)':'#FFF3CD';
-            const col=!hasPO?'var(--re)':qtyMatch?'var(--bl)':'#856404';
-            const title=!hasPO?'⚠️ Aucun PO Stocky pour cette semaine':qtyMatch?'✅ PO correspondant':'⚠️ PO trouvé mais quantité différente (PO: '+matchingPO.map(l=>l.qty).join(', ')+')';
-            return `<td style="text-align:center;background:${bg};color:${col};font-weight:600;font-size:12px;padding:8px 10px" title="${title}">${fmt(v)}</td>`;
-          }
-          return `<td style="text-align:center;color:var(--t3)">—</td>`;
-        }).join('')}
-      </tr>`).join('')}</tbody>
-    </table></div>`;
-  }
-  if(!html)html='<div style="text-align:center;padding:50px;color:var(--t3)">Aucune réception en cours</div>';
-  document.getElementById('rc-cont').innerHTML=html;
-}
 function rPlanRec(){
   const fourn=document.getElementById('f-pr2')?.value||'';
   const par=document.getElementById('p-pr2')?.value||'';
