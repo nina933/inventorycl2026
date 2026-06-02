@@ -826,8 +826,8 @@ function rReceptions(){
             <tbody>${c.lignes.map(l=>`<tr>
               <td>
                 ${l.nom}
-                ${COMMENTS_MAP[l.nom]?`<div style="font-size:11px;color:var(--am);margin-top:3px">💬 ${COMMENTS_MAP[l.nom]}</div>`:''}
-              </td>
+${l.com?`<div style="font-size:11px;color:var(--am);margin-top:3px">💬 ${l.com}</div>`:''}
+</td>
               <td style="color:var(--t3);font-size:12px">${l.variante&&l.variante!=='Default Title'?l.variante:'—'}</td>
               <td style="text-align:right;font-weight:500">${fmt(l.qty)}</td>
             </tr>`).join('')}</tbody>
