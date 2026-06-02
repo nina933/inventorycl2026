@@ -358,7 +358,7 @@ async function loadData(){
 
     // ← AJOUT : Commentaires produits (col A = nom produit, col K = index 10 = commentaire)
     COMMENTS_MAP={};
-    (raw['Commentaires']||[]).slice(1).forEach(r=>{
+    (raw['Stocky Orders']||[]).slice(1).forEach(r=>{
       const nom=String(r[0]||'').trim();
       const com=String(r[10]||'').trim();
       if(nom&&com)COMMENTS_MAP[nom]=com;
