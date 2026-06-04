@@ -510,8 +510,7 @@ async function loadData(){
         const moisIdx=Math.min(11,Math.floor(((sem-1)/52.18)*12));
         const moisKey=moisLabels[moisIdx];
         const fcMois=fc[moisKey]||0;
-        demandeCumulee+=fcMois>0?fcMois/4.33:(vd.moy||0);
-      }
+demandeCumulee+=fcMois>0?fcMois/4.33:0;      }
       let statut;
       // Rupture ET Critique : seulement si demande > 0 sur le délai
 if(stock<=0&&demandeCumulee>0) statut='rupture';
