@@ -511,9 +511,8 @@ async function loadData(){
       else statut='active';
       const _r0=String(r[0]||'').trim().replace(/\s*\|\s*$/,'');
       const vn1=VN1_MAP[nb]||VN1_MAP[nom]||VN1_MAP[_r0]||VN1_NORM[normKey(nb)]||VN1_NORM[normKey(nom)]||VN1_NORM[normKey(_r0)]||0;
-      PRODS.push({nom,nb,variante:variante==='Default Title'?'':variante,fourn,statut,statut_produit,stock,pareto,
-        en_cmd,fc_m05,wks_left,vt:vd.total||0,vm:vd.moy||0,vc:vd.curV||0,sems:vd.sems||{},vn1});
-    });
+PRODS.push({nom,nb,variante:variante==='Default Title'?'':variante,fourn,statut,statut_produit,stock,pareto,
+        en_cmd,fc_m05,wks_left,demande_cumulee:demandeCumulee,vt:vd.total||0,vm:vd.moy||0,vc:vd.curV||0,sems:vd.sems||{},vn1});
 
     // Etat des stocks
     ETAT=pT(raw['Etat des stocks']||[]).filter(r=>r['Nom produit']&&!String(r['Nom produit']).startsWith('Dernière')).map(r=>{
