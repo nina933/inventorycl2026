@@ -117,8 +117,8 @@ tbody tr:hover td{background:#FAFAF9}
       <button class="fb eq-btn" onclick="setEquipe('nina',this)" style="padding:4px 10px;font-size:12px">Nina</button>
       <button class="fb eq-btn" onclick="setEquipe('clovis',this)" style="padding:4px 10px;font-size:12px">Clovis</button>
     </div>
-    <button class="rbtn" onclick="loadData()">↻ Actualiser</button>
-  </div>
+<button class="rbtn" onclick="loadData()">↻ Actualiser</button>
+<button class="rbtn" onclick="alert('VENDOR:\n'+Object.keys(VENDOR_MAP).slice(0,5).join('\n')+'\n\nPRODS:\n'+[...new Set(PRODS.map(p=>p.fourn))].slice(0,5).join('\n'))">🔍 Debug</button>  </div>
 </div>
 <div class="overlay" id="overlay" onclick="toggleSidebar()"></div>
 <div class="lay">
