@@ -514,8 +514,8 @@ async function loadData(){
       }
       let statut;
       // Rupture ET Critique : seulement si demande > 0 sur le délai
-      if(stock<=0&&demandeCumulee>0) statut='rupture';
-      else if(stock>0&&demandeCumulee>0&&stock<demandeCumulee) statut='critique';
+if(stock<=0&&demandeCumulee>0) statut='rupture';
+else if(stock>0&&demandeCumulee>0&&stock<demandeCumulee) statut='critique';
       else statut='active';
       const _r0=String(r[0]||'').trim().replace(/\s*\|\s*$/,'');
       const vn1=VN1_MAP[nb]||VN1_MAP[nom]||VN1_MAP[_r0]||VN1_NORM[normKey(nb)]||VN1_NORM[normKey(nom)]||VN1_NORM[normKey(_r0)]||0;
