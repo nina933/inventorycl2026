@@ -504,13 +504,8 @@ async function loadData(){
       const delai_fourn=DELAIS_MAP[fourn]||0;
       const semCourante=CW;
       // Demande cumulée sur délai fournisseur (min 1 sem), forecast sinon ventes moyennes
-      let demandeCumulee=0;
-      for(let s=0;s<Math.max(delai_fourn,1);s++){
-        const sem=semCourante+s;
-        const moisIdx=Math.min(11,Math.floor(((sem-1)/52.18)*12));
-        const moisKey=moisLabels[moisIdx];
-        const fcMois=fc[moisKey]||0;
-demandeCumulee+=fcMois>0?fcMois/4.33:0;      }
+      const demandeParSem=fc_cur>0?fc_cur/4.33:0;
+      const demandeCumulee=demandeParSem*Math.max(delai_fourn,1);
       let statut;
       // Rupture ET Critique : seulement si demande > 0 sur le délai
 if(stock<=0&&demandeCumulee>0) statut='rupture';
