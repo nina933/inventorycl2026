@@ -674,10 +674,10 @@ function rAlertes(){
   });
   rows=sortProds(rows,SORTS.a.col,SORTS.a.dir);
   PRODS_A=rows;
-  const ruptures=PRODS.filter(p=>p.statut==='rupture').length;
-  const crit=PRODS.filter(p=>p.statut==='critique').length;
-  const actifs=PRODS.filter(p=>p.statut_produit==='active').length;
-  const pa=PRODS.filter(p=>(p.statut==='rupture'||p.statut==='critique')&&p.pareto==='A').length;
+  const ruptures=PRODS.filter(p=>p.statut==='rupture'&&p.demande_cumulee>0&&equipeMatch(p.fourn)).length;
+  const crit=PRODS.filter(p=>p.statut==='critique'&&p.demande_cumulee>0&&equipeMatch(p.fourn)).length;
+  const actifs=PRODS.filter(p=>p.statut_produit==='active'&&equipeMatch(p.fourn)).length;
+  const pa=PRODS.filter(p=>(p.statut==='rupture'||p.statut==='critique')&&p.pareto==='A'&&p.demande_cumulee>0&&equipeMatch(p.fourn)).length;
   document.getElementById('mg-a').innerHTML=`
     <div class="mc" onclick="clearDD('dd-sta','sta',null);clearDD('dd-pa','pa',null);clearDD('dd-fa','fa',null);rAlertes()"><div class="mcl">Produits actifs</div><div class="mcv">${fmt(actifs)}</div><div class="mcs">Tout réinitialiser</div></div>
     <div class="mc" onclick="clearDD('dd-pa','pa',null);clearDD('dd-fa','fa',null);sC('sta',['rupture']);updDD('dd-sta','sta');rAlertes()"><div class="mcl">Ruptures (stock=0)</div><div class="mcv r">${fmt(ruptures)}</div><div class="mcs">↗ Cliquer pour voir</div></div>
