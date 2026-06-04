@@ -715,7 +715,7 @@ if(p.statut!=='rupture'&&p.demande_cumulee<=0)return false;    if(!equipeMatch(p
     <td style="text-align:right;font-size:12px">${p.wks_left!==null?p.wks_left+' sem.':'—'}</td>
     <td style="text-align:right">${p.en_cmd>0?fmt(p.en_cmd):'—'}</td>
     <td style="text-align:right">${fmt(p.fc_m05)}</td>
-    <td style="text-align:right;font-weight:500;color:${(p.stock+p.en_cmd-p.fc_m05)<0?'var(--re)':(p.stock+p.en_cmd-p.fc_m05)<=5?'var(--am)':'var(--gr)'}">${fmt(p.stock+p.en_cmd-p.fc_m05)}</td>
+    <td style="text-align:right;font-weight:500;color:${p.statut==='rupture'?'var(--re)':p.statut==='critique'?'var(--am)':'var(--gr)'}
   </tr>`).join('')||'<tr><td colspan="9" style="text-align:center;padding:40px;color:var(--t3)">Aucune alerte 🎉</td></tr>';
 }
 
