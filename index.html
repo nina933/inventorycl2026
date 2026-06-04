@@ -300,7 +300,16 @@ tbody tr:hover td{background:#FAFAF9}
 const URL_AS='https://script.google.com/macros/s/AKfycbz1VxL0PwyXBgxEiP6FuiGiuTN9abahOfc0D6ZiRoPnkaGUmSvUDz7PzDAmsSIgxDapJA/exec';
 let PRODS=[],ETAT=[],STOCKY=[],RECEPTIONS=[],PREVISION=[],PROMOS=[],BUDGET=[],PRIX_MAP={},DELAIS_MAP={},FORECAST=[];
 // ← AJOUT : map produit -> commentaire
-let COMMENTS_MAP={};
+// Tableau correspondance Vendor → Équipe
+    VENDOR_MAP={};
+    (raw['Tableau correspondance']||[]).slice(1).forEach(r=>{
+      const fourn=String(r[0]||'').trim();
+      const eq=String(r[1]||'').trim().toLowerCase();
+      if(fourn)VENDOR_MAP[fourn]=eq;
+    });
+
+    // ← AJOUT : Commentaires produits
+    COMMENTS_MAP={};
 let VN1_NORM={};
 function normKey(s){return String(s||'').toLowerCase().replace(/[^a-z0-9]/g,' ').replace(/\s+/g,' ').trim();}
 let FOURNISSEURS=[],ABC_MAP={},VN1_MAP={};
