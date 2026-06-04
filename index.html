@@ -664,6 +664,8 @@ function rAlertes(){
   let rows=PRODS.filter(p=>{
     const isR=p.statut==='rupture',isC=p.statut==='critique';
     if(!isR&&!isC)return false;
+    if(p.demande_cumulee<=0)return false;
+    if(!equipeMatch(p.fourn))return false;
     if(fourns.length&&!fourns.includes(p.fourn))return false;
     if(pars.length&&!pars.includes(p.pareto))return false;
     if(stats.length&&!stats.includes(p.statut))return false;
