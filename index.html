@@ -302,6 +302,19 @@ let FOURNISSEURS=[],ABC_MAP={},VN1_MAP={};
 let PF='all',CV='alertes',SEL_BUDGET=null;
 let SORTS={a:{col:'stock',dir:1},s:{col:'stock',dir:1},f:{col:'pareto',dir:1},v:{col:'vt',dir:-1},e:{col:'nom',dir:1},fc:{col:'nom',dir:1},pr:{col:'nom',dir:1}};
 let PRODS_A=[],PRODS_S=[];
+let VENDOR_MAP={};
+let EQUIPE_FILTER='';
+function equipeMatch(fourn){
+  if(!EQUIPE_FILTER)return true;
+  const eq=(VENDOR_MAP[fourn]||'').toLowerCase();
+  return eq.includes(EQUIPE_FILTER);
+}
+function setEquipe(eq,el){
+  EQUIPE_FILTER=eq;
+  document.querySelectorAll('.eq-btn').forEach(b=>b.classList.remove('on'));
+  el.classList.add('on');
+  renderView(CV);
+}
 
 function pT(vals){
   if(!vals||vals.length<2)return[];
