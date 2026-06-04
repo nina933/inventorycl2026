@@ -520,7 +520,6 @@ if(stock<0) statut='rupture';
 else if(stock===0&&en_cmd===0) statut='rupture';
 else if(stock<demandeCumulee&&en_cmd===0&&demandeCumulee>0) statut='critique';
 else statut='active';
-      else statut='active';
       const _r0=String(r[0]||'').trim().replace(/\s*\|\s*$/,'');
       const vn1=VN1_MAP[nb]||VN1_MAP[nom]||VN1_MAP[_r0]||VN1_NORM[normKey(nb)]||VN1_NORM[normKey(nom)]||VN1_NORM[normKey(_r0)]||0;
       PRODS.push({nom,nb,variante:variante==='Default Title'?'':variante,fourn,statut,statut_produit,stock,pareto,
