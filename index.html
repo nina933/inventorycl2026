@@ -118,6 +118,7 @@ tbody tr:hover td{background:#FAFAF9}
       <button class="fb eq-btn" onclick="setEquipe('clovis',this)" style="padding:4px 10px;font-size:12px">Clovis</button>
     </div>
     <button class="rbtn" onclick="loadData()">↻ Actualiser</button>
+  <button class="rbtn" onclick="alert('Sans équipe:\n'+[...new Set(PRODS.map(p=>p.fourn))].filter(f=>!VENDOR_MAP[f]&&f).join('\n'))">🔍 Sans équipe</button>
   </div>
 </div>
 <div class="overlay" id="overlay" onclick="toggleSidebar()"></div>
