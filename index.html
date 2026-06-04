@@ -702,6 +702,7 @@ function rStocks(){
   const srch=(document.getElementById('s-s')?.value||'').toLowerCase();
   const fourns=gC('fs'),pars=gC('ps'),stats=gC('sts');
   let rows=PRODS.filter(p=>{
+    if(!equipeMatch(p.fourn))return false;
     if(fourns.length&&!fourns.includes(p.fourn))return false;
     if(pars.length&&!pars.includes(p.pareto))return false;
     if(stats.length&&!stats.includes(p.statut))return false;
