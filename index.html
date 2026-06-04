@@ -111,7 +111,12 @@ tbody tr:hover td{background:#FAFAF9}
 <div class="topbar">
   <button class="hamburger" onclick="toggleSidebar()" aria-label="Menu"><span></span><span></span><span></span></button><span class="logo">CAFÉ LIÉGEOIS</span><div class="sep"></div>
   <span id="tinfo" style="font-size:12px;color:var(--t3)">—</span>
-  <div class="tb-r"><span class="upd" id="tupd"></span>
+<div class="tb-r"><span class="upd" id="tupd"></span>
+    <div style="display:flex;gap:4px;margin-right:6px">
+      <button class="fb eq-btn on" onclick="setEquipe('',this)" style="padding:4px 10px;font-size:12px">Tous</button>
+      <button class="fb eq-btn" onclick="setEquipe('nina',this)" style="padding:4px 10px;font-size:12px">Nina</button>
+      <button class="fb eq-btn" onclick="setEquipe('clovis',this)" style="padding:4px 10px;font-size:12px">Clovis</button>
+    </div>
     <button class="rbtn" onclick="loadData()">↻ Actualiser</button>
   </div>
 </div>
