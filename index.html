@@ -733,8 +733,7 @@ function rStocks(){
     <td style="text-align:right"><span class="${sc(p.stock)}">${fmt(p.stock)}</span></td>
     <td>${bS(p.statut,p.statut_produit)}</td>
     <td style="text-align:right;font-size:12px">${p.wks_left!==null?p.wks_left+' sem.':'—'}</td>
-    <td style="text-align:right">${p.en_cmd>0?`<span style="cursor:pointer;color:var(--bl);text-decoration:underline;font-weight:500" onclick="navReceptions('${p.nom.replace(/'/g,'\\'')}')" title="Voir dans Réceptions">${fmt(p.en_cmd)}</span>`:'—'}</td>
-    <td style="text-align:right">${fmt(p.fc_m05)}</td>
+<td style="text-align:right">${p.en_cmd>0?`<span style="cursor:pointer;color:var(--bl);text-decoration:underline;font-weight:500" onclick="navReceptions(this)" data-nom="${p.nom.replace(/"/g,'&quot;')}" title="Voir dans Réceptions">${fmt(p.en_cmd)}</span>`:'—'}</td>    <td style="text-align:right">${fmt(p.fc_m05)}</td>
     <td style="text-align:right;font-weight:500;color:${p.statut==='rupture'?'var(--re)':p.statut==='critique'?'var(--am)':'var(--gr)'}">${fmt(p.stock+p.en_cmd)}</td>
   </tr>`).join('')||'<tr><td colspan="9" style="text-align:center;padding:40px;color:var(--t3)">Aucun résultat</td></tr>';
 }
@@ -914,8 +913,8 @@ function toggleRec(id,aid){
   if(a)a.textContent=open?'▲':'▼';
 }
 
-function navReceptions(nom){
-  document.querySelectorAll('.ni').forEach(e=>e.classList.remove('on'));
+function navReceptions(el){
+  const nom=typeof el==='string'?el:(el.dataset?.nom||'');  document.querySelectorAll('.ni').forEach(e=>e.classList.remove('on'));
   document.querySelector('.ni[onclick*="receptions"]')?.classList.add('on');
   document.querySelectorAll('.view').forEach(e=>e.classList.remove('on'));
   document.getElementById('v-receptions').classList.add('on');
