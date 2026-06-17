@@ -568,7 +568,7 @@ else statut='active';
 PROMOS=pT(raw['Promos']||[]).filter(r=>r['Produit']&&(r['Date Début']||r['Date Fin'])).map(r=>{
   const boost=n(String(r['Boost%']||'0').replace('%',''));
       const prixPromo=n(r['Prix promo']||r['Prix Promo']||r['Prix régulier promo']||0);
-      const variante=String(r['Variante'​]||r['Variant'​]||r['SKU'​]||r['Nom de la variante'​]||'').trim();
+      const variante=String(r['Variante Shopify']||'').trim();
       return{produit:String(r['Produit']||''),marque:String(r['Marque']||''),
         dd:fmtD(r['Date Début']),df:fmtD(r['Date Fin']),
         sd:n(r['Sem. Début (ISO)']),sf:n(r['Sem. Fin (ISO)']),
