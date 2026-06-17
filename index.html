@@ -1065,8 +1065,8 @@ function navPO(el){const fourn=el?el.dataset.fourn.replace(/&#39;/g,"'"):argumen
   CV='po';
   const swpo=document.getElementById('sw-po');
   if(swpo){
-    for(let i=0;i<swpo.options;i++){
-      if(parseInt(swpo.options[i].value)===sw){swpo.selectedIndex=i;break;}
+  for(let i=0;i<swpo.options.length;i++){      
+  if(parseInt(swpo.options[i].value)===sw){swpo.selectedIndex=i;break;}
     }
   }
   const fpo=document.getElementById('f-po');
