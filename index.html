@@ -565,8 +565,8 @@ else statut='active';
 
     // Promos
     // Promos: colonne J = prix promo (lu par nom de header via pT)
-    PROMOS=pT(raw['Promos']||[]).filter(r=>r['Produit']).map(r=>{
-      const boost=n(String(r['Boost%']||'0').replace('%',''));
+PROMOS=pT(raw['Promos']||[]).filter(r=>r['Produit']&&(r['Date Début']||r['Date Fin'])).map(r=>{
+  const boost=n(String(r['Boost%']||'0').replace('%',''));
       const prixPromo=n(r['Prix promo']||r['Prix Promo']||r['Prix régulier promo']||0);
       const variante=String(r['Variante'​]||r['Variant'​]||r['SKU'​]||r['Nom de la variante'​]||'').trim();
       return{produit:String(r['Produit']||''),marque:String(r['Marque']||''),
