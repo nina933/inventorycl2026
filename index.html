@@ -1063,8 +1063,7 @@ function rPromos(){
       ?`<strong style="color:var(--br)">${r.prixPromo.toLocaleString('fr-CA',{minimumFractionDigits:2,maximumFractionDigits:2})} $</strong>`
       :'—';
     return`<tr>
-      <td><div class="pn">${r.produit}</div>${r.variante?`<div class="pv">${r.variante}</div>`:''}</td>
-      <td style="white-space:nowrap">${r.marque}</td>
+<td><div class="pn">${r.produit}</div>${(()=>{const p=PRODS.find(x=>x.nom===r.produit||x.nb===r.produit);return p&&p.variante?`<div class="pv">${p.variante}</div>`:r.variante?`<div class="pv">${r.variante}</div>`:''})()}</td>      <td style="white-space:nowrap">${r.marque}</td>
       <td>${badge}</td>
       <td style="white-space:nowrap;font-size:12px">S${String(r.sd).padStart(2,'0')}–S${String(r.sf).padStart(2,'0')}</td>
       <td style="font-size:12px">${r.dd}</td>
