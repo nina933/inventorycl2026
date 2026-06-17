@@ -571,18 +571,14 @@ else statut='active';
     });
 
     // Promos
-    // Promos: colonne J (index 9) = prix promo
-    const promosRaw=raw['Promos']||[];
-    PROMOS=promosRaw.slice(1).filter(r=>r[0]).map(r=>{
-      const produit=String(r[0]||'').trim();
-      const marque=String(r[1]||'').trim();
-      const dd=fmtD(r[2]);
-      const df=fmtD(r[3]);
-      const sd=n(r[4]);
-      const sf=n(r[5]);
-      const boost=n(String(r[6]||'0').replace('%',''));
-      const prixPromo=n(r[9]||0); // col J
-      return{produit,marque,dd,df,sd,sf,boost,prixPromo};
+    // Promos: colonne J = prix promo (lu par nom de header via pT)
+    PROMOS=pT(raw['Promos']||[]).filter(r=>r['Produit']).map(r=>{
+      const boost=n(String(r['Boost%']||'0').replace('%',''));
+      const prixPromo=n(r['Prix promo']||r['Prix Promo']||r['Prix régulier promo']||0);
+      return{produit:String(r['Produit']||''),marque:String(r['Marque']||''),
+        dd:fmtD(r['Date Début']),df:fmtD(r['Date Fin']),
+        sd:n(r['Sem. Début (ISO)']),sf:n(r['Sem. Fin (ISO)']),
+        boost,prixPromo};
     });
 
     // Budget
