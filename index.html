@@ -511,8 +511,7 @@ else statut='active';
       const _r0=String(r[0]||'').trim().replace(/\s*\|\s*$/,'');
       const vn1=VN1_ID_MAP[idVariante]||VN1_MAP[nb]||VN1_MAP[nom]||VN1_MAP[_r0]||VN1_NORM[normKey(nb)]||VN1_NORM[normKey(nom)]||VN1_NORM[normKey(_r0)]||0;
       PRODS.push({nom,nb,variante:variante==='Default Title'?'':variante,fourn,statut,statut_produit,stock,pareto,
-        en_cmd,fc_m05:fc_cur,wks_left,demande_cumulee:demandeCumulee,vt:vd.total||0,vm:vd.moy||0,vc:vd.curV||0,sems:vd.sems||{},vn1});
-    });
+  en_cmd,fc_m05:fc_cur,wks_left,demande_cumulee:demandeCumulee,vt:vd.total||0,vm:vd.moy||0,vc:vd.curV||0,sems:vd.sems||{},vn1,idVariante});
 
     // Etat des stocks
     ETAT=pT(raw['Etat des stocks']||[]).filter(r=>r['Nom produit']&&!String(r['Nom produit']).startsWith('Dernière')).map(r=>{
@@ -933,14 +932,15 @@ function rPO(){
   const byF={};
   rows.forEach(r=>{if(!byF[r.fourn])byF[r.fourn]=[];byF[r.fourn].push(r);});
   let html='';
-  Object.entries(byF).sort((a,b)=>a[0].localeCompare(b[0])).forEach(([f,prods])=>{
-    const fm=prods.reduce((s,r)=>s+(r.sems[sw]*(r.prix||0)),0);
+window.PO_GROUPES=Object.entries(byF).sort((a,b)=>a[0].localeCompare(b[0]));
+window.PO_GROUPES.forEach(([f,prods],idx)=>{    const fm=prods.reduce((s,r)=>s+(r.sems[sw]*(r.prix||0)),0);
     html+=`<div style="margin-bottom:20px">
       <div style="display:flex;align-items:center;gap:10px;margin-bottom:8px">
         <span style="font-weight:600;font-size:13px;color:var(--t1)">${f}</span>
         <span style="font-size:12px;color:var(--t3)">${prods.length} produit(s)</span>
-        ${fm>0?`<span style="margin-left:auto;font-weight:500;color:var(--br)">${fmtM(fm)}</span>`:''}
-      </div>
+${fm>0?`<span style="margin-left:auto;font-weight:500;color:var(--br)">${fmtM(fm)}</span>`:''}
+        <button class="fb" id="btn-po-${idx}" onclick="envoyerCommandeFournisseur(${idx},${sw})" style="margin-left:8px">Créer la commande</button>
+      </div>      </div>
       <div class="tw"><table>
         <thead><tr><th>Produit</th><th>Cat.</th><th>Délai</th>
         ${wks.map(i=>`<th style="text-align:center">S${String(i).padStart(2,'0')}</th>`).join('')}
