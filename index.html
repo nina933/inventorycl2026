@@ -297,6 +297,9 @@ tbody tr:hover td{background:#FAFAF9}
 
     <div id="mc-lignes" style="margin-bottom:14px"></div>
 
+    <label style="font-size:11px;color:var(--t2);font-weight:600">Date de livraison (optionnel)</label>
+    <input type="date" id="mc-date" class="fin" style="width:100%;margin:6px 0 14px">
+
     <label style="font-size:11px;color:var(--t2);font-weight:600">Note (optionnel)</label>
     <textarea id="mc-note" class="fin" style="width:100%;height:50px;margin:6px 0 16px;resize:vertical"></textarea>
 
@@ -968,6 +971,7 @@ function rPO(){
         <span style="font-weight:600;font-size:13px;color:var(--t1)">${f}</span>
         <span style="font-size:12px;color:var(--t3)">${prods.length} produit(s)</span>
         ${fm>0?`<span style="margin-left:auto;font-weight:500;color:var(--br)">${fmtM(fm)}</span>`:''}
+        <input type="date" id="date-po-${idx}" style="padding:5px 8px;border:1px solid var(--b2);border-radius:6px;font-size:12px;font-family:'Inter',sans-serif" title="Date de livraison (optionnel)">
         <button class="fb" id="btn-po-${idx}" onclick="envoyerCommandeFournisseur(${idx},${sw})" style="margin-left:8px">Créer la commande</button>
       </div>
       <div class="tw"><table>
@@ -1013,6 +1017,9 @@ async function envoyerCommandeFournisseur(idx, sw){
   const btn = document.getElementById('btn-po-' + idx);
   if(btn){ btn.disabled = true; btn.textContent = 'Envoi…'; }
 
+  const dateInput = document.getElementById('date-po-' + idx);
+  const dateLivraison = dateInput ? dateInput.value : '';
+
   try {
     const resp = await fetch(URL_AS, {
       method: 'POST',
@@ -1020,6 +1027,7 @@ async function envoyerCommandeFournisseur(idx, sw){
       body: JSON.stringify({
         fournisseur: fourn,
         note: 'Commande créée depuis le dashboard - semaine S' + String(sw).padStart(2,'0'),
+        dateLivraison: dateLivraison,
         lignes: lignes
       })
     });
@@ -1035,6 +1043,9 @@ async function envoyerCommandeFournisseur(idx, sw){
       }
       if(data.lignesIgnorees && data.lignesIgnorees.length > 0){
         alert('Commande créée (' + data.poNumber + '), mais ' + data.lignesIgnorees.length + ' ligne(s) ignorée(s) — ID(s) variante introuvable(s) : ' + data.lignesIgnorees.join(', '));
+      }
+      if(data.dateAvertissement){
+        alert(data.dateAvertissement);
       }
     } else {
       alert('Erreur : ' + (data.error || 'inconnue'));
@@ -1057,6 +1068,7 @@ function ouvrirCommandeManuelle(){
   document.getElementById('mc-fourn').value = '';
   document.getElementById('mc-search').value = '';
   document.getElementById('mc-note').value = '';
+  document.getElementById('mc-date').value = '';
   document.getElementById('mc-search-results').style.display = 'none';
   document.getElementById('mc-fourn-list').innerHTML = FOURNISSEURS.map(f=>`<option value="${f.replace(/"/g,'&quot;')}">`).join('');
   renderLignesManuelles();
@@ -1131,6 +1143,7 @@ function renderLignesManuelles(){
 async function envoyerCommandeManuelle(){
   const fournisseur = document.getElementById('mc-fourn').value.trim();
   const note = document.getElementById('mc-note').value.trim();
+  const dateLivraison = document.getElementById('mc-date').value;
 
   if(!fournisseur){ alert('Le fournisseur est requis.'); return; }
   if(!MANUAL_LINES.length){ alert('Ajoute au moins un produit.'); return; }
@@ -1149,13 +1162,13 @@ async function envoyerCommandeManuelle(){
     const resp = await fetch(URL_AS, {
       method: 'POST',
       headers: { 'Content-Type': 'text/plain;charset=utf-8' },
-      body: JSON.stringify({ fournisseur, note, lignes })
+      body: JSON.stringify({ fournisseur, note, dateLivraison, lignes })
     });
 
     const data = await resp.json();
 
     if(data.success){
-      alert('Commande créée : ' + data.poNumber);
+      alert('Commande créée : ' + data.poNumber + (data.dateAvertissement ? '\n\n' + data.dateAvertissement : ''));
       fermerCommandeManuelle();
     } else {
       alert('Erreur : ' + (data.error || 'inconnue'));
