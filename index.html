@@ -578,8 +578,7 @@ else statut='active';
       const nomComplet=String(r[1]||'').trim();
       if(!cmd||!nomComplet)return;
       if(!byCmdT[cmd])byCmdT[cmd]={cmd,fourn:String(r[4]||'').trim(),
-        livraison:String(r[7]||'').trim()||'—',date_cmd:'',lignes:[],total:0};
-      const qty=n(r[6]||0);
+livraison:fmtD(String(r[7]||'').trim())||'—',date_cmd:'',lignes:[],total:0};      const qty=n(r[6]||0);
 const nouvelleDateT=String(r[9]||'').trim();
 const comT=nouvelleDateT?fmtD(nouvelleDateT):'';
 byCmdT[cmd].lignes.push({nom:nomComplet,variante:String(r[3]||''),qty,livraison:byCmdT[cmd].livraison,com:comT});      byCmdT[cmd].total+=qty;
