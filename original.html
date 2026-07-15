@@ -325,10 +325,18 @@ tbody tr:hover td{background:#FAFAF9}
     <div id="mp-lignes" style="margin-bottom:6px"></div>
     <div id="mp-total" style="text-align:right;font-size:13px;font-weight:600;color:var(--br);margin:10px 0 16px"></div>
 
-    <div style="font-size:11px;color:var(--t3);margin-bottom:16px">Augmenter une quantité envoie automatiquement un complément à Shopify. Diminuer une quantité ne modifie pas Shopify — ajuste le transfert manuellement dans l'admin si besoin.</div>
+    <div style="position:relative;margin-bottom:16px">
+      <input type="text" id="mp-add-input" placeholder="🔍 Ajouter un produit manquant à ce PO…"
+        style="width:100%;padding:7px 10px;border:1px solid var(--b2);border-radius:6px;font-size:12px"
+        oninput="rechercherProduitModifPO()">
+      <div id="mp-add-res" style="display:none;position:absolute;z-index:5;background:var(--w);border:1px solid var(--b2);border-radius:6px;width:100%;max-height:220px;overflow-y:auto;box-shadow:0 4px 12px rgba(0,0,0,.08)"></div>
+    </div>
+
+    <div style="font-size:11px;color:var(--t3);margin-bottom:16px">Augmenter une quantité (ou ajouter un produit) envoie automatiquement un complément à Shopify. Diminuer une quantité ne modifie pas Shopify — ajuste le transfert manuellement dans l'admin si besoin.</div>
 
     <div style="display:flex;gap:8px;justify-content:flex-end">
       <button class="rbtn" onclick="fermerModifPO()">Annuler</button>
+      <button class="rbtn" onclick="telechargerPDFDepuisModal()">📄 Télécharger le PDF</button>
       <button class="fb on" id="mp-submit" onclick="enregistrerModifPO()">Enregistrer les modifications</button>
     </div>
   </div>
@@ -636,7 +644,7 @@ else statut='active';
 livraison:fmtD(String(r[7]||'').trim())||'—',date_cmd:'',lignes:[],total:0};      const qty=n(r[6]||0);
 const nouvelleDateT=String(r[9]||'').trim();
 const comT=nouvelleDateT?fmtD(nouvelleDateT):'';
-byCmdT[cmd].lignes.push({nom:nomComplet,variante:String(r[3]||''),qty,livraison:byCmdT[cmd].livraison,com:comT});      byCmdT[cmd].total+=qty;
+byCmdT[cmd].lignes.push({nom:nomComplet,titre:String(r[2]||'').trim(),variante:String(r[3]||''),sku:String(r[8]||'').trim(),qty,livraison:byCmdT[cmd].livraison,com:comT});      byCmdT[cmd].total+=qty;
     });
     TRANSFERTS=Object.values(byCmdT).filter(c=>c.lignes.length>0).sort((a,b)=>b.cmd.localeCompare(a.cmd));
 
@@ -647,15 +655,19 @@ byCmdT[cmd].lignes.push({nom:nomComplet,variante:String(r[3]||''),qty,livraison:
     // partielle a eu lieu sur un PO avant que tu le modifies, la quantité affichée ici sera inférieure à la
     // commande d'origine (elle reflète ce qu'il reste à recevoir, pas ce qui a été commandé au total).
     {
-      const combinedNomToId={};
+      const combinedNomToId={}, skuToId={};
       PRODS.forEach(p=>{
         const combine = p.variante ? p.nom+' - '+p.variante : p.nom;
-        combinedNomToId[combine]=p.idVariante;
+        combinedNomToId[normKey(combine)]=p.idVariante;
+        if(p.skuFourn)skuToId[normKey(p.skuFourn)]=p.idVariante;
       });
       const poEnvoyesReconstruit={};
       TRANSFERTS.forEach(c=>{
         if(!c.fourn)return;
-        const lignesResolues=c.lignes.map(l=>({idVariante:combinedNomToId[l.nom]||'',quantite:l.qty})).filter(l=>l.idVariante&&l.quantite>0);
+        const lignesResolues=c.lignes.filter(l=>l.qty>0).map(l=>{
+          const idV = combinedNomToId[normKey(l.nom)] || skuToId[normKey(l.sku)] || '';
+          return {idVariante:idV, quantite:l.qty, nom:l.titre||l.nom, variante:l.variante||'', sku:l.sku||''};
+        });
         if(!lignesResolues.length)return;
         if(!poEnvoyesReconstruit[c.fourn])poEnvoyesReconstruit[c.fourn]=[];
         poEnvoyesReconstruit[c.fourn].push({poNumber:c.cmd,lignes:lignesResolues,date:''});
@@ -1264,7 +1276,10 @@ function rPO(){
           <input type="date" id="date-po-${idx}" style="padding:5px 8px;border:1px solid var(--b2);border-radius:6px;font-size:12px;font-family:'Inter',sans-serif" title="Date de livraison (optionnel)">
           ${dejaEnvoyes.length?dejaEnvoyes.map(e=>{
             const fSafe2=f.replace(/'/g,"\\'");
-            return `<span onclick="ouvrirModifPO('${fSafe2}','${e.poNumber}')" title="Cliquer pour ouvrir et modifier uniquement ce PO" style="cursor:pointer;font-size:12px;font-weight:600;padding:6px 10px;border-radius:6px;border:1px solid var(--gr);color:var(--gr);background:var(--grb)">✓ ${e.poNumber}</span>`;
+            return `<span style="display:inline-flex;align-items:center;border-radius:6px;border:1px solid var(--gr);overflow:hidden">
+              <span onclick="ouvrirModifPO('${fSafe2}','${e.poNumber}')" title="Cliquer pour ouvrir et modifier uniquement ce PO" style="cursor:pointer;font-size:12px;font-weight:600;padding:6px 8px;color:var(--gr);background:var(--grb)">✓ ${e.poNumber}</span>
+              <span onclick="telechargerPDFUnPO('${fSafe2}','${e.poNumber}')" title="Télécharger le PDF de ce PO uniquement" style="cursor:pointer;font-size:12px;padding:6px 8px;color:var(--gr);background:var(--w);border-left:1px solid var(--gr)">📄</span>
+            </span>`;
           }).join(''):''}
           ${aEnvoyer>0?`<button class="fb" id="btn-po-${idx}" onclick="envoyerCommandeFournisseur(${idx},[${semaines.join(',')}])" style="margin-left:${dejaEnvoyes.length?'0':'8px'}">${dejaEnvoyes.length?'Ajouter '+aEnvoyer+' produit(s)':'Créer la commande'}</button>`:''}
           <button class="fb" ${dejaEnvoyes.length?'':'disabled'} onclick="${dejaEnvoyes.length?`genererPDFPO(${idx},[${semaines.join(',')}])`:''}" style="margin-left:8px${dejaEnvoyes.length?'':';opacity:.4;cursor:not-allowed'}" title="${dejaEnvoyes.length?'':'Crée la commande pour obtenir le numéro de PO'}">📄 PDF fournisseur</button>
@@ -1564,7 +1579,7 @@ async function envoyerCommandeFournisseur(idx, semaines){
 
   const lignes = prods.map(r=>{
     const p = PRODS.find(x=>x.nom===r.nom);
-    return { idVariante: r.idVariante || (p ? p.idVariante : ''), quantite: sems.reduce((s,sw)=>s+(r.sems[sw]||0),0) };
+    return { idVariante: r.idVariante || (p ? p.idVariante : ''), quantite: sems.reduce((s,sw)=>s+(r.sems[sw]||0),0), nom:r.nom, variante:p&&p.variante?p.variante:'', sku:p&&p.skuFourn?p.skuFourn:'' };
   }).filter(l => l.idVariante && l.quantite > 0 && !idVEnvoyes.has(l.idVariante));
 
   if(!lignes.length){
@@ -1584,7 +1599,7 @@ async function envoyerCommandeFournisseur(idx, semaines){
 
     if(data.success){
       if(!PO_ENVOYES[fourn])PO_ENVOYES[fourn]=[];
-      PO_ENVOYES[fourn].push({poNumber:data.poNumber, lignes:lignes.map(l=>({idVariante:l.idVariante,quantite:l.quantite})), date:new Date().toISOString()});
+      PO_ENVOYES[fourn].push({poNumber:data.poNumber, lignes:lignes.map(l=>({idVariante:l.idVariante,quantite:l.quantite,nom:l.nom,variante:l.variante,sku:l.sku})), date:new Date().toISOString()});
       if(data.lignesIgnorees && data.lignesIgnorees.length > 0){
         alert('Commande créée (' + data.poNumber + '), mais ' + data.lignesIgnorees.length + ' ligne(s) ignorée(s) — ID(s) variante introuvable(s) : ' + data.lignesIgnorees.join(', '));
       }
@@ -1618,6 +1633,33 @@ async function envoyerCommandeFournisseur(idx, semaines){
 // de mutation confirmée pour retirer des lignes d'un transfert
 // existant) — on avertit et on ne modifie rien pour cette ligne.
 // ============================================================
+// Télécharge le PDF d'un seul PO précis (pas le cumul de tous les PO du fournisseur,
+// contrairement au bouton global "📄 PDF fournisseur").
+function telechargerPDFUnPO(fourn, poNumber){
+  const entree = (PO_ENVOYES[fourn]||[]).find(e=>e.poNumber===poNumber);
+  if(!entree){ alert('PO introuvable.'); return; }
+  const lignes = entree.lignes.filter(l=>l.quantite>0).map(l=>{
+    const p = PRODS.find(x=>x.idVariante===l.idVariante);
+    return {
+      nom: l.nom || (p?p.nom:'(produit non identifié)'),
+      variante: l.variante || (p&&p.variante?p.variante:''),
+      sku: l.sku || (p&&p.skuFourn?p.skuFourn:'—'),
+      qte: l.quantite,
+      prix: p ? (PRIX_ID_MAP[l.idVariante]||PRIX_MAP[normKey(p.nom)]||PRIX_FALLBACK_ID[l.idVariante]||0) : 0
+    };
+  });
+  ouvrirDocumentPO(fourn, poNumber, '-', lignes);
+}
+
+function telechargerPDFDepuisModal(){
+  if(!MODIF_PO_CTX) return;
+  const {fourn, poNumber} = MODIF_PO_CTX;
+  const lignes = MODIF_PO_LINES.filter(l=>l.quantite>0).map(l=>({
+    nom:l.nom, variante:l.variante||'', sku:l.sku||'—', qte:l.quantite, prix:l.prix||0
+  }));
+  ouvrirDocumentPO(fourn, poNumber, '-', lignes);
+}
+
 function ouvrirModifPO(fourn, poNumber){
   const entree = (PO_ENVOYES[fourn]||[]).find(e=>e.poNumber===poNumber);
   if(!entree){ alert('PO introuvable.'); return; }
@@ -1626,9 +1668,10 @@ function ouvrirModifPO(fourn, poNumber){
   MODIF_PO_LINES = entree.lignes.filter(l=>l.quantite>0).map(l=>{
     const p = PRODS.find(x=>x.idVariante===l.idVariante);
     return {
-      idVariante: l.idVariante,
-      nom: p?p.nom:'(produit introuvable — '+l.idVariante+')',
-      variante: p&&p.variante?p.variante:'',
+      idVariante: l.idVariante||'',
+      nom: l.nom || (p?p.nom:'(produit non identifié)'),
+      variante: l.variante || (p&&p.variante?p.variante:''),
+      sku: l.sku || (p&&p.skuFourn?p.skuFourn:''),
       quantiteOriginale: l.quantite,
       quantite: l.quantite,
       prix: p ? (PRIX_ID_MAP[l.idVariante]||PRIX_MAP[normKey(p.nom)]||PRIX_FALLBACK_ID[l.idVariante]||0) : 0
@@ -1636,6 +1679,8 @@ function ouvrirModifPO(fourn, poNumber){
   });
 
   document.getElementById('mp-titre').textContent = 'Modifier le PO '+poNumber+' — '+fourn;
+  document.getElementById('mp-add-input').value='';
+  document.getElementById('mp-add-res').style.display='none';
   renderLignesModifPO();
   document.getElementById('modal-modifpo-overlay').style.display = 'flex';
 }
@@ -1651,6 +1696,53 @@ function majQuantiteModifPOLigne(idx, val){
   renderLignesModifPO();
 }
 
+function retirerLigneModifPO(idx){
+  MODIF_PO_LINES.splice(idx,1);
+  renderLignesModifPO();
+}
+
+// Recherche pour ajouter un produit qui ne fait pas encore partie de ce PO
+// (soit un produit jamais commandé pour ce fournisseur, soit un produit dont
+// la ligne n'a pas pu être rattachée automatiquement au catalogue).
+function rechercherProduitModifPO(){
+  if(!MODIF_PO_CTX)return;
+  const q=document.getElementById('mp-add-input').value.trim().toLowerCase();
+  const resDiv=document.getElementById('mp-add-res');
+  if(!q){resDiv.style.display='none';resDiv.innerHTML='';return;}
+
+  const dejaDansModif=new Set(MODIF_PO_LINES.map(l=>l.idVariante).filter(Boolean));
+  const matches=PRODS.filter(p=>
+    p.idVariante && p.fourn===MODIF_PO_CTX.fourn && !dejaDansModif.has(p.idVariante) && p.nom.toLowerCase().includes(q)
+  ).slice(0,8);
+
+  if(!matches.length){
+    resDiv.style.display='block';
+    resDiv.innerHTML='<div style="padding:10px;color:var(--t3);font-size:12px">Aucun résultat pour ce fournisseur</div>';
+    return;
+  }
+  resDiv.style.display='block';
+  resDiv.innerHTML=matches.map(p=>{
+    const idSafe=p.idVariante.replace(/'/g,"\\'");
+    return `<div style="padding:8px 12px;cursor:pointer;border-bottom:1px solid var(--b1);font-size:12px" onclick="ajouterProduitModifPO('${idSafe}')">
+      <div style="font-weight:500">${p.nom}</div>
+      ${p.variante?`<div style="color:var(--t3);font-size:11px">${p.variante}</div>`:''}
+    </div>`;
+  }).join('');
+}
+
+function ajouterProduitModifPO(idVariante){
+  const p=PRODS.find(x=>x.idVariante===idVariante);
+  if(!p)return;
+  MODIF_PO_LINES.push({
+    idVariante:p.idVariante, nom:p.nom, variante:p.variante||'', sku:p.skuFourn||'',
+    quantiteOriginale:0, quantite:1,
+    prix:PRIX_ID_MAP[idVariante]||PRIX_MAP[normKey(p.nom)]||PRIX_FALLBACK_ID[idVariante]||0
+  });
+  document.getElementById('mp-add-input').value='';
+  document.getElementById('mp-add-res').style.display='none';
+  renderLignesModifPO();
+}
+
 function renderLignesModifPO(){
   const cont = document.getElementById('mp-lignes');
   let total = 0;
@@ -1658,7 +1750,8 @@ function renderLignesModifPO(){
     total += l.quantite*l.prix;
     const delta = l.quantite - l.quantiteOriginale;
     let deltaTxt = '';
-    if(delta>0) deltaTxt = `<span style="color:var(--gr);font-size:11px">+${delta} (complément à envoyer)</span>`;
+    if(!l.idVariante) deltaTxt = `<span style="color:var(--am);font-size:11px">⚠ non rattaché au catalogue — impossible d'envoyer un complément automatique pour cette ligne</span>`;
+    else if(delta>0) deltaTxt = `<span style="color:var(--gr);font-size:11px">+${delta} (complément à envoyer)</span>`;
     else if(delta<0) deltaTxt = `<span style="color:var(--re);font-size:11px">${delta} (à ajuster manuellement dans Shopify)</span>`;
     return `<div style="display:flex;align-items:center;gap:10px;padding:8px 0;border-bottom:1px solid var(--b1)">
       <div style="flex:1">
@@ -1669,6 +1762,7 @@ function renderLignesModifPO(){
       <div style="font-size:12px;color:var(--t3)">déjà envoyé : ${l.quantiteOriginale}</div>
       <input type="number" min="0" value="${l.quantite}" style="width:60px;padding:4px 6px;border:1px solid var(--b2);border-radius:6px;font-size:12px;text-align:center" onchange="majQuantiteModifPOLigne(${idx},this.value)">
       <div style="width:80px;text-align:right;font-size:12px;color:var(--br);font-weight:500">${fmtM(l.quantite*l.prix)}</div>
+      <a href="#" onclick="retirerLigneModifPO(${idx});return false;" style="color:var(--re);font-size:11px;text-decoration:underline">retirer</a>
     </div>`;
   }).join('');
   document.getElementById('mp-total').textContent = MODIF_PO_LINES.length ? 'Total : '+fmtM(total) : '';
@@ -1678,32 +1772,40 @@ async function enregistrerModifPO(){
   if(!MODIF_PO_CTX) return;
   const {fourn, poNumber} = MODIF_PO_CTX;
 
-  const augmentations = MODIF_PO_LINES.filter(l=>l.quantite>l.quantiteOriginale)
-    .map(l=>({idVariante:l.idVariante, quantite:l.quantite-l.quantiteOriginale, nom:l.nom}));
+  const augmentations = MODIF_PO_LINES.filter(l=>l.quantite>l.quantiteOriginale);
+  const sansIdVariante = augmentations.filter(l=>!l.idVariante);
+  const envoyables = augmentations.filter(l=>l.idVariante).map(l=>({idVariante:l.idVariante, quantite:l.quantite-l.quantiteOriginale, nom:l.nom, variante:l.variante, sku:l.sku}));
   const diminutions = MODIF_PO_LINES.filter(l=>l.quantite<l.quantiteOriginale);
 
-  if(!augmentations.length && !diminutions.length){ fermerModifPO(); return; }
+  if(!envoyables.length && !diminutions.length && !sansIdVariante.length){ fermerModifPO(); return; }
 
   if(diminutions.length){
     alert('Les réductions de quantité ne sont pas encore automatisées vers Shopify (' + diminutions.map(l=>l.nom).join(', ') + '). Ajuste le transfert ' + poNumber + ' directement dans l\'admin Shopify si besoin.');
   }
+  if(sansIdVariante.length){
+    alert('Ces produits ne sont pas rattachés au catalogue interne, impossible de les envoyer automatiquement : ' + sansIdVariante.map(l=>l.nom).join(', ') + '. À commander manuellement dans Shopify si besoin.');
+  }
 
-  if(!augmentations.length){ fermerModifPO(); rPO(); return; }
+  if(!envoyables.length){ fermerModifPO(); rPO(); return; }
 
-  if(!confirm('Envoyer un complément pour ' + augmentations.length + ' produit(s) (suite au PO ' + poNumber + ') ?'))return;
+  if(!confirm('Envoyer un complément pour ' + envoyables.length + ' produit(s) (suite au PO ' + poNumber + ') ?'))return;
 
   const btn = document.getElementById('mp-submit');
   if(btn){ btn.disabled = true; btn.textContent = 'Envoi…'; }
 
   try{
     const note = 'Modification du PO ' + poNumber + ' — complément suite ajustement de quantités';
-    const data = await envoyerLignesAuBackend(fourn, note, augmentations.map(l=>({idVariante:l.idVariante, quantite:l.quantite})), '');
+    const data = await envoyerLignesAuBackend(fourn, note, envoyables.map(l=>({idVariante:l.idVariante, quantite:l.quantite})), '');
 
     if(data.success){
       if(!PO_ENVOYES[fourn])PO_ENVOYES[fourn]=[];
-      PO_ENVOYES[fourn].push({poNumber:data.poNumber, lignes:augmentations.map(l=>({idVariante:l.idVariante,quantite:l.quantite})), date:new Date().toISOString()});
+      PO_ENVOYES[fourn].push({poNumber:data.poNumber, lignes:envoyables.map(l=>({idVariante:l.idVariante,quantite:l.quantite,nom:l.nom,variante:l.variante,sku:l.sku})), date:new Date().toISOString()});
       fermerModifPO();
       rPO();
+      if(confirm('Complément créé (' + data.poNumber + '). Télécharger le PDF de ce complément maintenant ?')){
+        const lignesPourPDF = envoyables.map(l=>({nom:l.nom, variante:l.variante||'', sku:l.sku||'—', qte:l.quantite, prix:prixLigneManuelle({idVariante:l.idVariante,nom:l.nom})}));
+        ouvrirDocumentPO(fourn, data.poNumber+' — complément au PO '+poNumber, '-', lignesPourPDF);
+      }
     } else {
       alert('Erreur : ' + (data.error || 'inconnue'));
       if(btn){ btn.disabled = false; btn.textContent = 'Enregistrer les modifications'; }
