@@ -1,0 +1,747 @@
+/* ==========================================================================
+   CAFÉ LIÉGEOIS - INVENTORY DASHBOARD CSS
+   ========================================================================== */
+
+/* --------------------------------------------------------------------------
+   1. GLOBAL RESET & VARIABLES
+   -------------------------------------------------------------------------- */
+* {
+    box-sizing: border-box;
+    margin: 0;
+    padding: 0;
+}
+
+:root {
+    /* Backgrounds */
+    --bg: #F7F5F2;       /* Main app background */
+    --sb: #EEEAE4;       /* Sidebar background */
+    --w: #FFF;           /* White backgrounds (cards, tables) */
+    
+    /* Borders */
+    --b1: #E5E0D8;       /* Light border */
+    --b2: #D5CFC6;       /* Darker border */
+    
+    /* Typography */
+    --t1: #1A1714;       /* Primary text */
+    --t2: #6B6560;       /* Secondary text */
+    --t3: #A09C96;       /* Muted/tertiary text */
+    
+    /* Brand Colors */
+    --br: #8B5E2A;       /* Brand Primary (Brown) */
+    --brl: #F5EFE6;      /* Brand Light */
+    
+    /* Status Colors */
+    --gr: #2D7D46;       /* Green (Good/Active) */
+    --grb: #EBF5EE;      /* Green Light */
+    --am: #A0620A;       /* Amber (Warning/Critical) */
+    --amb: #FEF3E2;      /* Amber Light */
+    --re: #C0392B;       /* Red (Error/Out of Stock) */
+    --reb: #FDECEA;      /* Red Light */
+    --bl: #1A6FA8;       /* Blue (Info) */
+    --blb: #E8F3FB;      /* Blue Light */
+}
+
+body {
+    background: var(--bg);
+    color: var(--t1);
+    font-family: 'Inter', sans-serif;
+    font-size: 13px;
+    min-height: 100vh;
+    display: flex;
+    flex-direction: column;
+}
+
+/* --------------------------------------------------------------------------
+   2. TOP NAVIGATION BAR
+   -------------------------------------------------------------------------- */
+.topbar {
+    height: 48px;
+    background: var(--w);
+    border-bottom: 1px solid var(--b1);
+    display: flex;
+    align-items: center;
+    padding: 0 20px;
+    gap: 14px;
+    position: sticky;
+    top: 0;
+    z-index: 200;
+    flex-shrink: 0;
+}
+
+.logo {
+    font-weight: 700;
+    font-size: 14px;
+}
+
+.sep {
+    width: 1px;
+    height: 20px;
+    background: var(--b1);
+}
+
+.tb-r {
+    margin-left: auto;
+    display: flex;
+    align-items: center;
+    gap: 12px;
+}
+
+.upd {
+    font-size: 11px;
+    color: var(--t3);
+}
+
+/* Topbar Buttons */
+.rbtn {
+    background: none;
+    border: 1px solid var(--b2);
+    color: var(--t2);
+    border-radius: 6px;
+    padding: 5px 12px;
+    font-size: 12px;
+    cursor: pointer;
+    font-family: 'Inter', sans-serif;
+    transition: all .15s;
+}
+
+.rbtn:hover {
+    border-color: var(--br);
+    color: var(--br);
+}
+
+/* --------------------------------------------------------------------------
+   3. MAIN APP LAYOUT (SIDEBAR + CONTENT)
+   -------------------------------------------------------------------------- */
+.lay {
+    display: flex;
+    flex: 1;
+    height: calc(100vh - 48px);
+    overflow: hidden;
+}
+
+/* Sidebar */
+.sidebar {
+    width: 188px;
+    background: var(--sb);
+    border-right: 1px solid var(--b1);
+    overflow-y: auto;
+    flex-shrink: 0;
+    padding: 10px 0;
+}
+
+.sbl {
+    font-size: 10px;
+    font-weight: 600;
+    text-transform: uppercase;
+    letter-spacing: .1em;
+    color: var(--t3);
+    padding: 12px 16px 4px;
+}
+
+/* Sidebar Navigation Items */
+.ni {
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    padding: 7px 10px;
+    margin: 1px 6px;
+    border-radius: 6px;
+    cursor: pointer;
+    color: var(--t2);
+    font-size: 13px;
+    transition: all .12s;
+    user-select: none;
+}
+
+.ni:hover {
+    background: var(--b1);
+    color: var(--t1);
+}
+
+.ni.on {
+    background: var(--brl);
+    color: var(--br);
+    font-weight: 500;
+}
+
+.nil {
+    display: flex;
+    align-items: center;
+    gap: 7px;
+}
+
+/* Sidebar Badges (Notification Bubbles) */
+.nib {
+    background: var(--br);
+    color: #fff;
+    border-radius: 10px;
+    padding: 1px 7px;
+    font-size: 10px;
+    font-weight: 600;
+    min-width: 22px;
+    text-align: center;
+}
+
+.nib.g { background: var(--gr); }
+.nib.a { background: var(--am); }
+
+/* Main Content Area */
+.con {
+    flex: 1;
+    overflow-y: auto;
+    padding: 24px 28px;
+}
+
+/* Tab Switching Logic (Hides inactive tabs) */
+.view { display: none; }
+.view.on { display: block; }
+
+/* --------------------------------------------------------------------------
+   4. LOADING SCREEN (OVERLAY)
+   -------------------------------------------------------------------------- */
+.lov {
+    position: fixed;
+    inset: 0;
+    background: var(--bg);
+    display: flex;
+    flex-direction: column;
+    align-items: center;
+    justify-content: center;
+    gap: 14px;
+    z-index: 999;
+}
+
+.ltit {
+    font-size: 14px;
+    font-weight: 700;
+    color: var(--br);
+    text-transform: uppercase;
+    letter-spacing: .08em;
+}
+
+.lbw {
+    width: 200px;
+    height: 2px;
+    background: var(--b1);
+    border-radius: 2px;
+    overflow: hidden;
+}
+
+.lb {
+    width: 40%;
+    height: 100%;
+    background: var(--br);
+    animation: ls 1s linear infinite;
+    border-radius: 2px;
+}
+
+@keyframes ls {
+    0% { transform: translateX(-250%); }
+    100% { transform: translateX(400%); }
+}
+
+.lmsg {
+    font-size: 11px;
+    color: var(--t3);
+}
+
+/* --------------------------------------------------------------------------
+   5. DASHBOARD COMPONENTS (CARDS, METRICS, FILTERS)
+   -------------------------------------------------------------------------- */
+/* Metric Cards Grid */
+.mg {
+    display: grid;
+    grid-template-columns: repeat(auto-fill, minmax(180px, 1fr));
+    gap: 14px;
+    margin-bottom: 24px;
+}
+
+.mc {
+    background: var(--w);
+    border: 1px solid var(--b1);
+    border-radius: 10px;
+    padding: 18px 20px;
+    cursor: pointer;
+    transition: box-shadow .15s;
+}
+
+.mc:hover {
+    box-shadow: 0 2px 8px rgba(0,0,0,.06);
+}
+
+.mcl {
+    font-size: 10px;
+    font-weight: 600;
+    text-transform: uppercase;
+    letter-spacing: .08em;
+    color: var(--t3);
+    margin-bottom: 10px;
+}
+
+/* Metric Values */
+.mcv {
+    font-size: 28px;
+    font-weight: 300;
+    line-height: 1;
+}
+
+.mcv.r { color: var(--re); }
+.mcv.a { color: var(--am); }
+.mcv.b { color: var(--br); }
+.mcv.g { color: var(--gr); }
+
+.mcs {
+    font-size: 11px;
+    color: var(--t3);
+    margin-top: 6px;
+}
+
+/* Section Headers */
+.sh {
+    display: flex;
+    align-items: center;
+    gap: 10px;
+    margin-bottom: 14px;
+}
+
+.st {
+    font-size: 11px;
+    font-weight: 600;
+    text-transform: uppercase;
+    letter-spacing: .09em;
+    color: var(--t2);
+}
+
+.rc {
+    font-size: 12px;
+    color: var(--t3);
+    margin-left: auto;
+}
+
+/* Filter Bar */
+.fl {
+    display: flex;
+    gap: 8px;
+    margin-bottom: 14px;
+    flex-wrap: wrap;
+    align-items: center;
+}
+
+/* Filter Inputs */
+.fsel {
+    padding: 6px 26px 6px 10px;
+    font-size: 12px;
+    border: 1px solid var(--b2);
+    border-radius: 7px;
+    background: var(--w) url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='11' height='11' viewBox='0 0 24 24' fill='none' stroke='%236B6560' stroke-width='2'%3E%3Cpolyline points='6 9 12 15 18 9'/%3E%3C/svg%3E") no-repeat right 8px center;
+    color: var(--t1);
+    font-family: 'Inter', sans-serif;
+    outline: none;
+    appearance: none;
+    cursor: pointer;
+}
+
+.fsel:focus { border-color: var(--br); }
+
+.fin {
+    padding: 6px 10px;
+    font-size: 12px;
+    border: 1px solid var(--b2);
+    border-radius: 7px;
+    background: var(--w);
+    color: var(--t1);
+    font-family: 'Inter', sans-serif;
+    outline: none;
+    width: 210px;
+}
+
+.fin:focus { border-color: var(--br); }
+
+/* Filter Buttons */
+.fb {
+    padding: 5px 12px;
+    font-size: 12px;
+    border: 1px solid var(--b2);
+    border-radius: 6px;
+    background: var(--w);
+    color: var(--t2);
+    cursor: pointer;
+    font-family: 'Inter', sans-serif;
+    transition: all .12s;
+}
+
+.fb.on, .fb:hover {
+    border-color: var(--br);
+    color: var(--br);
+    background: var(--brl);
+}
+
+/* --------------------------------------------------------------------------
+   6. CUSTOM DROPDOWN CHECKBOX COMPONENT
+   -------------------------------------------------------------------------- */
+.dd {
+    position: relative;
+    display: inline-block;
+}
+
+.dd-btn {
+    display: inline-flex;
+    align-items: center;
+    gap: 6px;
+    padding: 6px 10px;
+    font-size: 12px;
+    border: 1px solid var(--b2);
+    border-radius: 7px;
+    background: var(--w);
+    color: var(--t2);
+    font-family: 'Inter', sans-serif;
+    outline: none;
+    cursor: pointer;
+    white-space: nowrap;
+    min-width: 130px;
+    justify-content: space-between;
+}
+
+.dd-btn:after {
+    content: '▾';
+    font-size: 10px;
+    flex-shrink: 0;
+}
+
+.dd-btn.on {
+    border-color: var(--br);
+    color: var(--br);
+    background: var(--brl);
+}
+
+.dd-panel {
+    display: none;
+    position: fixed;
+    background: var(--w);
+    border: 1px solid var(--b1);
+    border-radius: 8px;
+    box-shadow: 0 4px 16px rgba(0,0,0,.1);
+    z-index: 1000;
+    min-width: 200px;
+    padding: 4px 0;
+    max-height: 300px;
+    overflow-y: auto;
+}
+
+.dd-panel.open { display: block; }
+
+.dd-item {
+    display: flex;
+    align-items: center;
+    gap: 9px;
+    padding: 8px 14px;
+    cursor: pointer;
+    font-size: 12px;
+    color: var(--t1);
+    user-select: none;
+}
+
+.dd-item:hover { background: var(--bg); }
+
+.dd-item input[type=checkbox] {
+    accent-color: var(--br);
+    width: 13px;
+    height: 13px;
+    cursor: pointer;
+    flex-shrink: 0;
+}
+
+.dd-sep {
+    height: 1px;
+    background: var(--b1);
+    margin: 3px 0;
+}
+
+.dd-all {
+    padding: 7px 14px;
+    font-size: 11px;
+    color: var(--br);
+    cursor: pointer;
+    font-weight: 500;
+}
+
+.dd-all:hover { background: var(--brl); }
+
+/* --------------------------------------------------------------------------
+   7. DATA TABLES
+   -------------------------------------------------------------------------- */
+/* Table Wrapper */
+.tw {
+    background: var(--w);
+    border: 1px solid var(--b1);
+    border-radius: 10px;
+    overflow-x: auto;
+}
+
+table {
+    width: 100%;
+    border-collapse: collapse;
+}
+
+th {
+    padding: 10px 14px;
+    text-align: left;
+    font-size: 10px;
+    font-weight: 600;
+    text-transform: uppercase;
+    letter-spacing: .08em;
+    color: var(--t3);
+    background: var(--bg);
+    border-bottom: 1px solid var(--b1);
+    white-space: nowrap;
+    cursor: pointer;
+    user-select: none;
+}
+
+th:hover { color: var(--br); }
+th.asc::after { content: ' ↑'; }
+th.desc::after { content: ' ↓'; }
+
+td {
+    padding: 10px 14px;
+    border-bottom: 1px solid var(--b1);
+    vertical-align: middle;
+}
+
+tr:last-child td { border-bottom: none; }
+tbody tr:hover td { background: #FAFAF9; }
+
+/* Table Text Formats */
+.pn {
+    font-weight: 500;
+    color: var(--t1);
+}
+
+.pv {
+    font-size: 11px;
+    color: var(--t3);
+    margin-top: 1px;
+}
+
+/* Product Status Tags */
+.bx {
+    display: inline-flex;
+    align-items: center;
+    justify-content: center;
+    padding: 2px 7px;
+    border-radius: 5px;
+    font-size: 11px;
+    font-weight: 600;
+    min-width: 22px;
+}
+
+.ba { background: var(--grb); color: var(--gr); } /* A-tier */
+.bb { background: var(--blb); color: var(--bl); } /* B-tier */
+.bc { background: var(--bg); color: var(--t3); border: 1px solid var(--b2); } /* C-tier */
+.br2 { background: var(--reb); color: var(--re); } /* Rupture */
+.bam { background: var(--amb); color: var(--am); } /* Critique */
+.bgr { background: var(--grb); color: var(--gr); } /* Active */
+.bbl { background: var(--blb); color: var(--bl); } /* Upcoming Promo */
+.bgy { background: var(--bg); color: var(--t3); border: 1px solid var(--b1); } /* Past Promo */
+
+/* Stock Quantity Highlighting */
+.sn { color: var(--re); font-weight: 600; } /* Negative/Zero Stock */
+.sl { color: var(--am); font-weight: 500; } /* Low Stock */
+.gpos { color: var(--gr); font-weight: 500; } /* Positive Growth */
+.gneg { color: var(--re); font-weight: 500; } /* Negative Growth */
+
+/* --------------------------------------------------------------------------
+   8. ACCORDION ROWS (USED IN RECEPTIONS TAB)
+   -------------------------------------------------------------------------- */
+.rg {
+    background: var(--w);
+    border: 1px solid var(--b1);
+    border-radius: 10px;
+    margin-bottom: 10px;
+    overflow: hidden;
+}
+
+.rh {
+    padding: 11px 16px;
+    background: var(--bg);
+    border-bottom: 1px solid var(--b1);
+    display: flex;
+    align-items: center;
+    gap: 12px;
+    flex-wrap: wrap;
+    cursor: pointer;
+    transition: background .12s;
+}
+
+.rh:hover { background: var(--brl); }
+
+.rh-cmd { font-size: 12px; font-weight: 600; color: var(--br); }
+.rh-f { font-size: 12px; color: var(--t2); }
+.rh-d { font-size: 11px; color: var(--t3); }
+.rh-cnt { margin-left: auto; font-size: 11px; color: var(--t3); }
+
+/* Hidden content block */
+.rb { display: none; }
+.rb.open { display: block; }
+
+/* --------------------------------------------------------------------------
+   9. LEGENDS
+   -------------------------------------------------------------------------- */
+.legend {
+    display: flex;
+    gap: 12px;
+    align-items: center;
+    flex-wrap: wrap;
+    margin-bottom: 10px;
+    font-size: 11px;
+}
+
+.leg-item {
+    display: flex;
+    align-items: center;
+    gap: 5px;
+}
+
+.leg-dot {
+    width: 12px;
+    height: 12px;
+    border-radius: 3px;
+    flex-shrink: 0;
+}
+
+/* --------------------------------------------------------------------------
+   10. RESPONSIVE MOBILE ADJUSTMENTS
+   -------------------------------------------------------------------------- */
+.hamburger {
+    display: none;
+    flex-direction: column;
+    gap: 5px;
+    cursor: pointer;
+    padding: 6px;
+    border: none;
+    background: none;
+}
+
+.hamburger span {
+    width: 22px;
+    height: 2px;
+    background: var(--t2);
+    border-radius: 2px;
+    transition: all .2s;
+}
+
+.overlay {
+    display: none;
+    position: fixed;
+    inset: 0;
+    background: rgba(0,0,0,.3);
+    z-index: 150;
+}
+
+@media(max-width: 768px) {
+    .hamburger { display: flex; }
+    
+    .sidebar {
+        position: fixed;
+        left: -200px;
+        top: 48px;
+        height: calc(100vh - 48px);
+        z-index: 160;
+        transition: left .25s;
+        box-shadow: 2px 0 12px rgba(0,0,0,.1);
+    }
+    
+    .sidebar.open { left: 0; }
+    .overlay.open { display: block; }
+    
+    .lay { flex-direction: column; }
+    .con { padding: 14px 12px; width: 100%; }
+    
+    .tw {
+        overflow-x: auto;
+        -webkit-overflow-scrolling: touch;
+    }
+    
+    .fl { gap: 6px; }
+    
+    .mg {
+        grid-template-columns: repeat(2, 1fr);
+        gap: 10px;
+    }
+    
+    .mc { padding: 14px; }
+    .mcv { font-size: 22px; }
+    
+    th, td {
+        padding: 8px 10px;
+        font-size: 11px;
+    }
+}
+
+
+
+/* ==========================================================
+   SIMULATION MODULE - DETAILED RECEIPT
+   ========================================================== */
+.receipt-total {
+    font-size: 24px;
+    font-weight: 700;
+    margin-bottom: 12px;
+    display: flex;
+    align-items: center;
+    gap: 10px;
+}
+
+.receipt-list {
+    list-style: none;
+    padding: 0;
+    margin: 0;
+    display: flex;
+    flex-direction: column;
+    gap: 6px;
+}
+
+.receipt-item {
+    font-size: 12px;
+    color: var(--t2);
+    display: flex;
+    align-items: baseline;
+    background: var(--bg);
+    padding: 6px 10px;
+    border-radius: 6px;
+    border: 1px solid var(--b1);
+}
+
+.receipt-item strong {
+    color: var(--t1);
+    font-weight: 600;
+    margin-right: 6px;
+    min-width: 135px; /* Keeps the text perfectly aligned vertically */
+}
+
+.receipt-item span.em {
+    font-weight: 600;
+    color: var(--br); /* Highlights the key numbers driving the decision */
+}
+
+.receipt-source {
+    font-size: 10px;
+    color: var(--t3);
+    font-style: italic;
+    margin-left: auto; /* Pushes the source citation to the far right */
+}
+
+
+.rbtn {
+    background: var(--w);
+    border: 1px solid var(--b2);
+    color: var(--t1);
+    padding: 6px 12px;
+    border-radius: 6px;
+    font-size: 12px;
+    font-weight: 500;
+    cursor: pointer;
+}
+.rbtn:hover {
+    background: var(--bg);
+}
