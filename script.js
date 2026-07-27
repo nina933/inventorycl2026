@@ -1405,57 +1405,71 @@ function rPO(){
   let html='';
   window.PO_GROUPES=Object.entries(byF).sort((a,b)=>a[0].localeCompare(b[0]));
   window.PO_SEMAINES=semaines;
-  
+
   tousFourns.forEach((f,blocIdx)=>{
     const prods=byF[f];
     const idx=window.PO_GROUPES.findIndex(([fg])=>fg===f);
+    
     if(prods&&prods.length){
-      const fm=prods.reduce((s,r)=>estDejaCommande(r)?s:s+(qtySel(r)*(r.prix||0)),0);
       const dejaEnvoyes=PO_ENVOYES[f]||[];
       const idVEnvoyes=idVEnvoyesFor(f);
-      const aEnvoyer=prods.filter(r=>{
+      
+      // 🚀 UPGRADE 1: Filter out already ordered products so they vanish from the table
+      const prodsNonCommandes = prods.filter(r => {
         const pMatch=PRODS.find(x=>x.nom===r.nom);
         const idV=r.idVariante||(pMatch?pMatch.idVariante:'');
-        return idV&&!idVEnvoyes.has(idV);
-      }).length;
+        return !(idV&&idVEnvoyes.has(idV));
+      });
+      
+      const fm=prodsNonCommandes.reduce((s,r)=>s+(qtySel(r)*(r.prix||0)),0);
+      const aEnvoyer=prodsNonCommandes.length;
+      
+      // 🚀 UPGRADE 2: Build the clean dropdown list for past POs
+      let dropdownHtml = '';
+      if(dejaEnvoyes.length) {
+        const fSafe2 = f.replace(/'/g,"\\\\'");
+        dropdownHtml = `
+          <div style="display:inline-flex; align-items:center; background:var(--grb); border:1px solid var(--gr); border-radius:6px; padding:2px; margin-left:10px;">
+            <select id="sel-po-${idx}" style="background:transparent; border:none; font-size:12px; color:var(--gr); font-weight:600; outline:none; cursor:pointer; padding:4px;">
+              <option value="" disabled selected>PO envoyés (${dejaEnvoyes.length})</option>
+              ${dejaEnvoyes.map(e => `<option value="${e.poNumber}">${e.poNumber}</option>`).join('')}
+            </select>
+            <button class="rbtn" onclick="const v=document.getElementById('sel-po-${idx}').value; if(v) ouvrirModifPO('${fSafe2}', v)" style="margin-left:4px; color:var(--gr); border:none; padding:4px 8px; font-weight:600;" title="Modifier le PO sélectionné">✏️ Modifier</button>
+            <button class="rbtn" onclick="const v=document.getElementById('sel-po-${idx}').value; if(v) telechargerPDFUnPO('${fSafe2}', v)" style="margin-left:4px; color:var(--gr); border:none; border-left:1px solid var(--gr); border-radius:0; padding:4px 8px; font-weight:600;" title="Télécharger le PDF du PO sélectionné">📄 PDF</button>
+          </div>
+        `;
+      }
+
       html+=`<div style="margin-bottom:20px">
         <div style="display:flex;align-items:center;gap:10px;margin-bottom:8px">
           <span style="font-weight:600;font-size:13px;color:var(--t1)">${f}</span>
-          <span style="font-size:12px;color:var(--t3)">${prods.length} produit(s)</span>
+          <span style="font-size:12px;color:var(--t3)">${aEnvoyer} produit(s) à commander</span>
           ${fm>0?`<span style="margin-left:auto;font-weight:500;color:var(--br)">${fmtM(fm)}</span>`:''}
+          
           <input type="date" id="date-po-${idx}" style="padding:5px 8px;border:1px solid var(--b2);border-radius:6px;font-size:12px;font-family:'Inter',sans-serif" title="Date de livraison (optionnel)">
-          ${dejaEnvoyes.length?dejaEnvoyes.map(e=>{
-            const fSafe2=f.replace(/'/g,"\\\\'");
-            return `<span style="display:inline-flex;align-items:center;border-radius:6px;border:1px solid var(--gr);overflow:hidden">
-              <span onclick="ouvrirModifPO('${fSafe2}','${e.poNumber}')" title="Cliquer pour ouvrir et modifier uniquement ce PO" style="cursor:pointer;font-size:12px;font-weight:600;padding:6px 8px;color:var(--gr);background:var(--grb)">✓ ${e.poNumber}</span>
-              <span onclick="telechargerPDFUnPO('${fSafe2}','${e.poNumber}')" title="Télécharger le PDF de ce PO uniquement" style="cursor:pointer;font-size:12px;padding:6px 8px;color:var(--gr);background:var(--w);border-left:1px solid var(--gr)">📄</span>
-            </span>`;
-          }).join(''):''}
-          ${aEnvoyer>0?`<button class="fb" id="btn-po-${idx}" onclick="envoyerCommandeFournisseur(${idx},[${semaines.join(',')}])" style="margin-left:${dejaEnvoyes.length?'0':'8px'}">${dejaEnvoyes.length?'Ajouter '+aEnvoyer+' produit(s)':'Créer la commande'}</button>`:''}
-          <button class="fb" ${dejaEnvoyes.length?'':'disabled'} onclick="${dejaEnvoyes.length?`genererPDFPO(${idx},[${semaines.join(',')}])`:''}" style="margin-left:8px${dejaEnvoyes.length?'':';opacity:.4;cursor:not-allowed'}" title="${dejaEnvoyes.length?'':'Crée la commande pour obtenir le numéro de PO'}">📄 PDF fournisseur</button>
+          
+          ${dropdownHtml}
+          
+          ${aEnvoyer>0?`<button class="fb" id="btn-po-${idx}" onclick="envoyerCommandeFournisseur(${idx},[${semaines.join(',')}])" style="margin-left:${dejaEnvoyes.length?'4px':'8px'}">Créer la commande</button>`:''}
         </div>
+        
+        ${aEnvoyer > 0 ? `
         <div class="tw"><table>
           <thead><tr><th>Produit</th><th>Cat.</th><th style="text-align:right">Stock actuel</th><th>Délai</th>
           ${wks.map(i=>`<th style="text-align:center">S${String(i).padStart(2,'0')}${semaines.includes(i)?' ✎':''}</th>`).join('')}
-          <th style="text-align:right">Total cmd</th><th style="text-align:center">Sem. couvertes</th><th style="text-align:right">Cout unit.</th><th style="text-align:right">Montant</th>
+          <th style="text-align:right">Total cmd</th><th style="text-align:center">Sem. couvertes</th><th style="text-align:right">Coût unit.</th><th style="text-align:right">Montant</th>
           </tr></thead>
-          <tbody>${prods.map(r=>{
+          <tbody>${prodsNonCommandes.map(r=>{
             const fournSafe=(r.fourn||'').replace(/'/g,"\\\\'");
             const idSafe=(r.idVariante||'').replace(/'/g,"\\\\'");
             const nomSafe=r.nom.replace(/'/g,"\\\\'");
             const special=r._manuel||r._custom;
-            const dejaCommande=estDejaCommande(r);
-            const pMatchIdV=r.idVariante||(PRODS.find(x=>x.nom===r.nom)?.idVariante||'');
-            const entreesPourCeProduit=dejaCommande?dejaEnvoyes.filter(e=>e.lignes.some(l=>l.idVariante===pMatchIdV)):[];
-            const entreeCommande=entreesPourCeProduit[0]||null;
             return `<tr${special?' style="background:var(--amb)"':''}>
             <td><div class="pn">${r.nom}${r._manuel?` <span style="font-size:10px;color:var(--am);font-weight:600">(ajout manuel) <a href="#" onclick="retirerExtra('${fournSafe}','${idSafe}');return false;" style="color:var(--re);text-decoration:underline">retirer</a></span>`:''}${r._custom?` <span style="font-size:10px;color:var(--am);font-weight:600">(produit personnalisé) <a href="#" onclick="retirerCustom('${fournSafe}','${r.customId}');return false;" style="color:var(--re);text-decoration:underline">retirer</a></span>`:''}</div>${(()=>{const p=PRODS.find(x=>x.nom===r.nom);return p&&p.variante?`<div class="pv">${p.variante}</div>`:''})()}</td>
             <td>${bP(r.cat)}</td>
             <td style="text-align:right">${(()=>{const p=PRODS.find(x=>x.nom===r.nom);return p?`<span class="${sc(p.stock)}">${fmt(p.stock)}</span>`:'—';})()}</td>
             <td style="text-align:center;font-size:12px">${r.delai>0?r.delai+' sem.':'—'}</td>
-            ${dejaCommande?
-              `<td colspan="${wks.length}" style="text-align:center;color:var(--gr);font-weight:600;font-size:12px">✓ Déjà commandé${entreesPourCeProduit.length?' ('+entreesPourCeProduit.map(e=>e.poNumber).join(', ')+')':''}</td>`
-              :wks.map(i=>{
+            ${wks.map(i=>{
               if(semaines.includes(i)){
                 const val=r.sems[i]||0;
                 const style=special?'border:1px solid var(--am)':'border:1px solid var(--b2)';
@@ -1468,25 +1482,14 @@ function rPO(){
                          `<td style="text-align:center;color:var(--t3)">—</td>`;
             }).join('')}
             <td style="text-align:right;font-weight:500">${r.tc>0?fmt(r.tc):'—'}</td>
-            <td style="text-align:center">${dejaCommande?'<span style="color:var(--t3)">—</span>':(()=>{const qty=qtySel(r);const vm=r.vm||0;const p=PRODS.find(x=>x.nom===r.nom);const stockAct=p?p.stock:0;const enCmd=p?(p.en_cmd||0):0;if(qty>0&&vm>0){const wksCov=Math.round((stockAct+enCmd+qty)/vm);const ok=wksCov>=(r.delai||0);return `<span style="font-weight:600;color:${ok?'var(--gr)':'var(--re)'}">${wksCov} sem.</span>`;}return '<span style="color:var(--t3)">—</span>';})()}</td>
+            <td style="text-align:center">${(()=>{const qty=qtySel(r);const vm=r.vm||0;const p=PRODS.find(x=>x.nom===r.nom);const stockAct=p?p.stock:0;const enCmd=p?(p.en_cmd||0):0;if(qty>0&&vm>0){const wksCov=Math.round((stockAct+enCmd+qty)/vm);const ok=wksCov>=(r.delai||0);return `<span style="font-weight:600;color:${ok?'var(--gr)':'var(--re)'}">${wksCov} sem.</span>`;}return '<span style="color:var(--t3)">—</span>';})()}</td>
             <td style="text-align:right"><input type="number" min="0" step="0.01" value="${r.prix>0?r.prix.toFixed(2):''}" placeholder="—" style="width:75px;padding:2px 4px;border:1px solid var(--b2);border-radius:4px;font-size:12px;text-align:right;color:var(--t2)" onchange="majPrixPO('${fournSafe}','${nomSafe}',this.value)"></td>
-            <td style="text-align:right;font-weight:500;color:var(--br)">${dejaCommande?'—':(r.prix>0?fmtM(qtySel(r)*r.prix):'—')}</td>
+            <td style="text-align:right;font-weight:500;color:var(--br)">${r.prix>0?fmtM(qtySel(r)*r.prix):'—'}</td>
           </tr>`;}).join('')}</tbody>
-        </table></div>
+        </table></div>` : ''}
+        
         ${renderHorsPO(f)}
         ${renderAjoutLibre(f,'b'+blocIdx)}
-        ${renderAjoutPersonnalise(f,'b'+blocIdx)}
-      </div>`;
-    } else {
-      // Fournisseur avec uniquement des ruptures/critiques hors PO, pas encore de commande calculée
-      html+=`<div style="margin-bottom:20px">
-        <div style="display:flex;align-items:center;gap:10px;margin-bottom:8px">
-          <span style="font-weight:600;font-size:13px;color:var(--t1)">${f}</span>
-          <span style="font-size:12px;color:var(--t3)">0 produit(s) dans le PO calculé</span>
-        </div>
-        ${renderHorsPO(f)}
-        ${renderAjoutLibre(f,'b'+blocIdx)}
-        ${renderAjoutPersonnalise(f,'b'+blocIdx)}
       </div>`;
     }
   });
@@ -2430,22 +2433,59 @@ function renderLignesModifPO(){
     total += l.quantite*l.prix;
     const delta = l.quantite - l.quantiteOriginale;
     let deltaTxt = '';
-    if(!l.idVariante) deltaTxt = `<span style="color:var(--am);font-size:11px">⚠ non rattaché au catalogue — impossible d'envoyer un complément automatique pour cette ligne</span>`;
+    
+    // Safety check for Custom items
+    const isCustom = l.idVariante && String(l.idVariante).startsWith('custom-');
+    if(!l.idVariante || isCustom) deltaTxt = `<span style="color:var(--am);font-size:11px">⚠ Produit personnalisé/hors catalogue — PDF uniquement, pas de synchronisation Shopify</span>`;
     else if(delta>0) deltaTxt = `<span style="color:var(--gr);font-size:11px">+${delta} (complément à envoyer)</span>`;
     else if(delta<0) deltaTxt = `<span style="color:var(--re);font-size:11px">${delta} (à ajuster manuellement dans Shopify)</span>`;
+    
     return `<div style="display:flex;align-items:center;gap:10px;padding:8px 0;border-bottom:1px solid var(--b1)">
       <div style="flex:1">
         <div style="font-size:13px;font-weight:500">${l.nom}</div>
         ${l.variante?`<div style="font-size:11px;color:var(--t3)">${l.variante}</div>`:''}
         ${deltaTxt}
       </div>
-      <div style="font-size:12px;color:var(--t3)">déjà envoyé : ${l.quantiteOriginale}</div>
-      <input type="number" min="0" value="${l.quantite}" style="width:60px;padding:4px 6px;border:1px solid var(--b2);border-radius:6px;font-size:12px;text-align:center" onchange="majQuantiteModifPOLigne(${idx},this.value)">
-      <div style="width:80px;text-align:right;font-size:12px;color:var(--br);font-weight:500">${fmtM(l.quantite*l.prix)}</div>
-      <a href="#" onclick="retirerLigneModifPO(${idx});return false;" style="color:var(--re);font-size:11px;text-decoration:underline">retirer</a>
+      <div style="font-size:12px;color:var(--t3)">Qté Envoyée: ${l.quantiteOriginale}</div>
+      <input type="number" min="0" value="${l.quantite}" style="width:50px;padding:4px;border:1px solid var(--b2);border-radius:6px;font-size:12px;text-align:center" onchange="majQuantiteModifPOLigne(${idx},this.value)">
+      
+      <div style="display:flex;align-items:center;gap:4px;">
+        <span style="font-size:11px;color:var(--t3)">Prix:</span>
+        <input type="number" min="0" step="0.01" value="${l.prix>0?l.prix.toFixed(2):'0.00'}" style="width:65px;padding:4px;border:1px solid var(--b2);border-radius:6px;font-size:12px;text-align:right" onchange="majPrixModifPOLigne(${idx},this.value)">
+      </div>
+      
+      <div style="width:70px;text-align:right;font-size:12px;color:var(--br);font-weight:500">${fmtM(l.quantite*l.prix)}</div>
+      <a href="#" onclick="retirerLigneModifPO(${idx});return false;" style="color:var(--re);font-size:11px;text-decoration:underline">✕</a>
     </div>`;
   }).join('');
   document.getElementById('mp-total').textContent = MODIF_PO_LINES.length ? 'Total : '+fmtM(total) : '';
+}
+
+// Add these two new helper functions right underneath it:
+function majPrixModifPOLigne(idx, val){
+  MODIF_PO_LINES[idx].prix = Math.max(0, parseFloat(val)||0);
+  renderLignesModifPO();
+}
+
+function ajouterProduitPersonnaliseModifPO(){
+  const nomEl = document.getElementById('mp-cust-nom');
+  const prixEl = document.getElementById('mp-cust-prix');
+  const qteEl = document.getElementById('mp-cust-qte');
+  
+  const nom = (nomEl?.value||'').trim();
+  const prix = Math.max(0, parseFloat(prixEl?.value)||0);
+  const qte = Math.max(1, parseInt(qteEl?.value)||1);
+  
+  if(!nom){ alert('Veuillez indiquer un nom de produit.'); return; }
+  
+  const id = 'custom-' + Date.now();
+  MODIF_PO_LINES.push({
+    idVariante: id, nom: nom, variante: '', sku: '',
+    quantiteOriginale: 0, quantite: qte, prix: prix
+  });
+  
+  nomEl.value = ''; prixEl.value = ''; qteEl.value = '1';
+  renderLignesModifPO();
 }
 
 async function enregistrerModifPO(){
@@ -2453,22 +2493,30 @@ async function enregistrerModifPO(){
   const {fourn, poNumber} = MODIF_PO_CTX;
 
   const augmentations = MODIF_PO_LINES.filter(l=>l.quantite>l.quantiteOriginale);
-  const sansIdVariante = augmentations.filter(l=>!l.idVariante);
-  const envoyables = augmentations.filter(l=>l.idVariante).map(l=>({idVariante:l.idVariante, quantite:l.quantite-l.quantiteOriginale, nom:l.nom, variante:l.variante, sku:l.sku}));
   const diminutions = MODIF_PO_LINES.filter(l=>l.quantite<l.quantiteOriginale);
-
-  if(!envoyables.length && !diminutions.length && !sansIdVariante.length){ fermerModifPO(); return; }
+  
+  const envoyables = augmentations.filter(l => l.idVariante && !String(l.idVariante).startsWith('custom-')).map(l=>({idVariante:l.idVariante, quantite:l.quantite-l.quantiteOriginale, nom:l.nom, variante:l.variante, sku:l.sku}));
+  const sansIdVariante = augmentations.filter(l => !l.idVariante || String(l.idVariante).startsWith('custom-'));
 
   if(diminutions.length){
-    alert('Les réductions de quantité ne sont pas encore automatisées vers Shopify (' + diminutions.map(l=>l.nom).join(', ') + '). Ajuste le transfert ' + poNumber + ' directement dans l\'admin Shopify si besoin.');
+    alert('Les réductions de quantité ne sont pas automatisées vers Shopify. Ajustez le transfert ' + poNumber + ' dans l\'admin Shopify si besoin.');
   }
-  if(sansIdVariante.length){
-    alert('Ces produits ne sont pas rattachés au catalogue interne, impossible de les envoyer automatiquement : ' + sansIdVariante.map(l=>l.nom).join(', ') + '. À commander manuellement dans Shopify si besoin.');
+  
+  if(sansIdVariante.length && !envoyables.length){
+     // Only custom items added. Save locally for PDF, bypass Shopify API
+     const oldEntryIndex = PO_ENVOYES[fourn].findIndex(e => e.poNumber === poNumber);
+     if (oldEntryIndex > -1) {
+         PO_ENVOYES[fourn][oldEntryIndex].lignes = MODIF_PO_LINES;
+     }
+     fermerModifPO();
+     rPO();
+     alert("Produits personnalisés ajoutés avec succès au PO (pour le PDF).");
+     return;
   }
 
   if(!envoyables.length){ fermerModifPO(); rPO(); return; }
 
-  if(!confirm('Envoyer un complément pour ' + envoyables.length + ' produit(s) (suite au PO ' + poNumber + ') ?'))return;
+  if(!confirm('Envoyer un complément pour ' + envoyables.length + ' produit(s) Shopify (suite au PO ' + poNumber + ') ?'))return;
 
   const btn = document.getElementById('mp-submit');
   if(btn){ btn.disabled = true; btn.textContent = 'Envoi…'; }
@@ -2478,13 +2526,18 @@ async function enregistrerModifPO(){
     const data = await envoyerLignesAuBackend(fourn, note, envoyables.map(l=>({idVariante:l.idVariante, quantite:l.quantite})), '');
 
     if(data.success){
-      if(!PO_ENVOYES[fourn])PO_ENVOYES[fourn]=[];
-      PO_ENVOYES[fourn].push({poNumber:data.poNumber, lignes:envoyables.map(l=>({idVariante:l.idVariante,quantite:l.quantite,nom:l.nom,variante:l.variante,sku:l.sku})), date:new Date().toISOString()});
+      // Save EVERYTHING back to local state so the PDF includes the original + new custom + new envoyables
+      const oldEntryIndex = PO_ENVOYES[fourn].findIndex(e => e.poNumber === poNumber);
+      if (oldEntryIndex > -1) {
+         PO_ENVOYES[fourn][oldEntryIndex].lignes = MODIF_PO_LINES;
+      }
+      
+      PO_ENVOYES[fourn].push({poNumber: data.poNumber, lignes: envoyables.map(l=>({idVariante:l.idVariante,quantite:l.quantite,nom:l.nom,variante:l.variante,sku:l.sku})), date:new Date().toISOString()});
+      
       fermerModifPO();
       rPO();
-      if(confirm('Complément créé (' + data.poNumber + '). Télécharger le PDF de ce complément maintenant ?')){
-        const lignesPourPDF = envoyables.map(l=>({nom:l.nom, variante:l.variante||'', sku:l.sku||'—', qte:l.quantite, prix:prixLigneManuelle({idVariante:l.idVariante,nom:l.nom})}));
-        ouvrirDocumentPO(fourn, data.poNumber+' — complément au PO '+poNumber, '-', lignesPourPDF);
+      if(confirm('Complément Shopify créé (' + data.poNumber + '). Télécharger le PDF mis à jour maintenant ?')){
+        telechargerPDFUnPO(fourn, poNumber); 
       }
     } else {
       alert('Erreur : ' + (data.error || 'inconnue'));
@@ -2572,8 +2625,25 @@ function majQuantiteManuelle(idx, val){
 }
 
 function prixLigneManuelle(l){
-  // 🚀 FIXED: Now safely uses COUT_MAP
+  if (l.prixOverride != null) return l.prixOverride;
   return (COUT_MAP[l.idVariante]||0)||COUT_MAP[normKey(l.nom)]||(PRIX_FALLBACK_ID[l.idVariante]||0);
+}
+function ajouterProduitPersonnaliseManuel(){
+  const nomEl = document.getElementById('mc-cust-nom');
+  const prixEl = document.getElementById('mc-cust-prix');
+  const qteEl = document.getElementById('mc-cust-qte');
+  
+  const nom = (nomEl?.value||'').trim();
+  const prix = Math.max(0, parseFloat(prixEl?.value)||0);
+  const qte = Math.max(1, parseInt(qteEl?.value)||1);
+  
+  if(!nom){ alert('Indique un nom de produit.'); return; }
+  
+  const id = 'custom-' + Date.now();
+  MANUAL_LINES.push({ idVariante: id, nom: nom, variante: '', quantite: qte, prixOverride: prix });
+  
+  nomEl.value = ''; prixEl.value = ''; qteEl.value = '1';
+  renderLignesManuelles();
 }
 
 function majTotalManuel(){
@@ -2617,21 +2687,61 @@ async function envoyerCommandeManuelle(){
   if(!fournisseur){ alert('Le fournisseur est requis.'); return; }
   if(!MANUAL_LINES.length){ alert('Ajoute au moins un produit.'); return; }
 
-  const lignes = MANUAL_LINES
-    .filter(l => l.quantite > 0)
+  // 1. Separate real Shopify items from custom items
+  const lignesShopify = MANUAL_LINES
+    .filter(l => l.quantite > 0 && !String(l.idVariante).startsWith('custom-'))
     .map(l => ({ idVariante: l.idVariante, quantite: l.quantite }));
 
-  if(!lignes.length){ alert('Toutes les quantités sont à 0.'); return; }
+  const lignesCustom = MANUAL_LINES
+    .filter(l => l.quantite > 0 && String(l.idVariante).startsWith('custom-'));
+
+  const toutesLesLignesValides = MANUAL_LINES.filter(l => l.quantite > 0);
+  if(!toutesLesLignesValides.length){ alert('Toutes les quantités sont à 0.'); return; }
 
   const btn = document.getElementById('mc-submit');
   btn.disabled = true;
   btn.textContent = 'Envoi…';
 
+  // SCENARIO A: 100% Custom Products (Bypass Shopify API entirely)
+  if (!lignesShopify.length && lignesCustom.length > 0) {
+      const fakePoNumber = 'CM-' + Math.floor(1000 + Math.random() * 9000); // Generates e.g., CM-4829
+      
+      DERNIERE_COMMANDE_MANUELLE = {
+        fourn: fournisseur,
+        poNumber: fakePoNumber,
+        dateLivraison: dateLivraison
+          ? new Date(dateLivraison+'T00:00:00').toLocaleDateString('fr-CA',{day:'numeric',month:'long',year:'numeric'})
+          : '-',
+        lignes: toutesLesLignesValides.map(l=>({
+          nom:l.nom, variante:l.variante||'', sku:(PRODS.find(x=>x.idVariante===l.idVariante)||{}).skuFourn||'—',
+          qte:l.quantite, prix:prixLigneManuelle(l)
+        }))
+      };
+      
+      // Save directly to the dashboard's visual memory
+      if (!PO_ENVOYES[fournisseur]) PO_ENVOYES[fournisseur] = [];
+      PO_ENVOYES[fournisseur].push({poNumber: fakePoNumber, lignes: DERNIERE_COMMANDE_MANUELLE.lignes.map(x => ({idVariante: x.idVariante || '', quantite: x.qte, nom: x.nom, variante: x.variante, sku: x.sku})), date: new Date().toISOString()});
+      
+      const successText = document.getElementById('mc-success-text');
+      if(successText) successText.textContent = '✓ Commande 100% personnalisée créée : ' + fakePoNumber;
+      const successZone = document.getElementById('mc-success');
+      if(successZone) successZone.style.display = 'flex';
+      
+      MANUAL_LINES = [];
+      renderLignesManuelles();
+      rPO(); // Instantly update the dropdowns
+      
+      btn.disabled = false;
+      btn.textContent = 'Créer la commande';
+      return;
+  }
+
+  // SCENARIO B: Real Shopify Products involved (Send only valid IDs to backend)
   try {
     const resp = await fetch(URL_AS, {
       method: 'POST',
       headers: { 'Content-Type': 'text/plain;charset=utf-8' },
-      body: JSON.stringify({ fournisseur, note, dateLivraison, lignes })
+      body: JSON.stringify({ fournisseur, note, dateLivraison, lignes: lignesShopify }) // Only send Shopify lines
     });
 
     const data = await resp.json();
@@ -2643,17 +2753,24 @@ async function envoyerCommandeManuelle(){
         dateLivraison: dateLivraison
           ? new Date(dateLivraison+'T00:00:00').toLocaleDateString('fr-CA',{day:'numeric',month:'long',year:'numeric'})
           : '-',
-        lignes: MANUAL_LINES.filter(l=>l.quantite>0).map(l=>({
+        // Glue the custom products back together with the Shopify products for the PDF
+        lignes: toutesLesLignesValides.map(l=>({
           nom:l.nom, variante:l.variante||'', sku:(PRODS.find(x=>x.idVariante===l.idVariante)||{}).skuFourn||'—',
           qte:l.quantite, prix:prixLigneManuelle(l)
         }))
       };
+      
+      if (!PO_ENVOYES[fournisseur]) PO_ENVOYES[fournisseur] = [];
+      PO_ENVOYES[fournisseur].push({poNumber: data.poNumber, lignes: DERNIERE_COMMANDE_MANUELLE.lignes.map(x => ({idVariante: x.idVariante || '', quantite: x.qte, nom: x.nom, variante: x.variante, sku: x.sku})), date: new Date().toISOString()});
+      
       const successText = document.getElementById('mc-success-text');
       if(successText) successText.textContent = '✓ Commande créée : ' + data.poNumber + (data.dateAvertissement ? ' — ' + data.dateAvertissement : '');
       const successZone = document.getElementById('mc-success');
       if(successZone) successZone.style.display = 'flex';
+      
       MANUAL_LINES = [];
       renderLignesManuelles();
+      rPO(); 
     } else {
       let msg = 'Erreur : ' + (data.error || 'inconnue');
       if(data.lignesIgnorees && data.lignesIgnorees.length > 0){
