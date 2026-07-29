@@ -93,6 +93,7 @@ const PRIX_FALLBACK_ID={"39423037636697":19.83,"39423037669465":158.64,"39423036
 let PO_ENVOYES={};
 let MODIF_PO_LINES=[];
 let MODIF_PO_CTX=null;
+let PO_TOGGLE_STATE={};
 
 
 // SORTS is the memory for the table headers. It remembers which column is clicked 
@@ -1270,6 +1271,26 @@ function rPO(){
     if(!equipeMatch(r.fourn))return false;
     if(fourn&&r.fourn!==fourn)return false;
     
+    // Ignore "ghost" spreadsheet rows
+    if(!r.idVariante) return false;
+
+    // 🚀 NEW FIX: Exclusion List for non-physical/bundled items
+    const lowerName = r.nom.toLowerCase();
+    const isExcluded = 
+        lowerName.includes("3 months of free coffee") ||
+        lowerName.includes("decaf -swiss process") ||
+        lowerName.includes("new wave") ||
+        lowerName.includes("hoodies") ||
+        lowerName.includes("gift card") ||
+        lowerName.includes("bundle") ||
+        lowerName.includes("demo") ||
+        lowerName.includes("open box") ||
+        lowerName.includes("return") ||
+        lowerName.includes("refurbished") ||
+        lowerName.includes("à vendre en boutique");
+
+    if (isExcluded) return false;
+    
     // NEW RULE: Check if the user manually hid this forecast item
     if(PO_IGNORED[r.fourn] && PO_IGNORED[r.fourn].includes(r.idVariante)) return false;
     
@@ -1350,15 +1371,38 @@ function rPO(){
   } else if(bar){bar.style.display='none';}
 
   // Ruptures/critiques hors de ce PO, groupées par fournisseur
-  const nomsDejaPO=new Set(rows.map(r=>r.nom));
+  // Ruptures/critiques hors de ce PO, groupées par fournisseur
+  // 🚀 FIX: Prevent items already in POs from duplicating in the yellow box
+  const nomsDejaPO=new Set([
+      ...rows.map(r=>r.nom),
+      ...Object.keys(PO_ENVOYES).flatMap(f2 => (PO_ENVOYES[f2]||[]).flatMap(e => e.lignes.map(l => l.nom)))
+  ]);
+
   const horsPO=PRODS.filter(p=>{
     if(!(p.statut==='rupture'||p.statut==='critique'))return false;
     if(!(p.demande_cumulee>0))return false;
     if(!equipeMatch(p.fourn))return false;
     if(fourn&&p.fourn!==fourn)return false;
     if(nomsDejaPO.has(p.nom))return false;
-    // Déjà couverte par une commande en cours (en_cmd) suffisante : on ne l'affiche pas comme "non incluse"
     if(p.en_cmd>0&&(p.stock+p.en_cmd)>=p.demande_cumulee)return false;
+
+    // 🚀 NEW FIX: Exclusion List for the yellow box
+    const lowerName = p.nom.toLowerCase();
+    const isExcluded = 
+        lowerName.includes("3 months of free coffee") ||
+        lowerName.includes("decaf -swiss process") ||
+        lowerName.includes("new wave") ||
+        lowerName.includes("hoodies") ||
+        lowerName.includes("gift card") ||
+        lowerName.includes("bundle") ||
+        lowerName.includes("demo") ||
+        lowerName.includes("open box") ||
+        lowerName.includes("return") ||
+        lowerName.includes("refurbished") ||
+        lowerName.includes("à vendre en boutique");
+
+    if (isExcluded) return false;
+
     return true;
   });
   const byFournHP={};
@@ -1372,8 +1416,15 @@ function rPO(){
       ${ps.map(p=>{
         const manque=Math.max(1,Math.ceil((p.demande_cumulee||0)-(p.stock||0)-(p.en_cmd||0)));
         const idSafe=p.idVariante.replace(/'/g,"\\\\'");
-        return `<div style="display:flex;align-items:center;gap:8px;padding:4px 0;font-size:12px">
-          <span style="flex:1">${p.nom}${p.variante?' — '+p.variante:''} <span style="color:${p.statut==='rupture'?'var(--re)':'var(--am)'};font-weight:600">(${p.statut})</span></span>
+        
+        // 🚀 AESTHETIC FIX: Slice off the duplicate variant from the main name
+        const cleanNom = (p.variante && p.nom.endsWith(' - ' + p.variante)) ? p.nom.slice(0, -(p.variante.length + 3)) : p.nom;
+        
+        return `<div style="display:flex;align-items:center;gap:8px;padding:6px 0;font-size:12px;border-bottom:1px dashed rgba(0,0,0,0.05)">
+          <div style="flex:1; line-height:1.3;">
+            <div style="font-weight:500;">${cleanNom} <span style="color:${p.statut==='rupture'?'var(--re)':'var(--am)'}; font-size:10px; font-weight:600; margin-left:6px;">(${p.statut})</span></div>
+            ${p.variante ? `<div style="font-size:11px; color:var(--t3);">${p.variante}</div>` : ''}
+          </div>
           <input type="number" min="1" value="${manque}" id="qty-hp-${p.idVariante}" style="width:55px;padding:3px 6px;border:1px solid var(--b2);border-radius:6px">
           <button class="fb" style="padding:3px 10px;font-size:11px" onclick="ajouterHorsPO('${idSafe}')">+ Ajouter</button>
         </div>`;
@@ -1411,14 +1462,15 @@ function rPO(){
   const byF={};
   rows.forEach(r=>{if(!byF[r.fourn])byF[r.fourn]=[];byF[r.fourn].push(r);});
   
-  // S'assurer que les fournisseurs ayant un PO déjà envoyé restent visibles et modifiables,
-  // même si aucun produit n'a de besoin de réappro pour la période actuellement sélectionnée.
   Object.keys(PO_ENVOYES).forEach(f2=>{
     if(!equipeMatch(f2))return;
     if(fourn&&f2!==fourn)return;
     const idVDejaDansByF=new Set((byF[f2]||[]).map(r=>r.idVariante||(PRODS.find(x=>x.nom===r.nom)?.idVariante||'')));
     const idVCommittes=new Set((PO_ENVOYES[f2]||[]).flatMap(e=>e.lignes.map(l=>l.idVariante)));
     idVCommittes.forEach(idV=>{
+      // Prevent empty IDs (shipping fees/ghost items) from being resurrected
+      if(!idV) return;
+      
       if(idVDejaDansByF.has(idV))return;
       const p=PRODS.find(x=>x.idVariante===idV);
       if(!p)return;
@@ -1432,36 +1484,34 @@ function rPO(){
   
   const tousFourns=[...new Set([...Object.keys(byF),...Object.keys(byFournHP)])].sort((a,b)=>a.localeCompare(b));
   let html='';
-  window.PO_GROUPES=Object.entries(byF).sort((a,b)=>a[0].localeCompare(b[0]));
+  
+  // 🚀 FIX: Update PO_GROUPES to include ALL suppliers (even if they only have yellow box items)
+  window.PO_GROUPES = tousFourns.map(f => [f, byF[f] || []]);
   window.PO_SEMAINES=semaines;
 
   tousFourns.forEach((f,blocIdx)=>{
-    const prods=byF[f];
-    const idx=window.PO_GROUPES.findIndex(([fg])=>fg===f);
+    const prods = byF[f] || []; 
+    const idx = blocIdx; 
     
-    if(prods&&prods.length){
+    if(prods.length > 0 || (byFournHP[f] && byFournHP[f].length > 0)){
       const dejaEnvoyes=PO_ENVOYES[f]||[];
       const idVEnvoyes=idVEnvoyesFor(f);
       
-      /// Filter out already ordered products so they vanish from the table
-      const prodsNonCommandes = prods.filter(r => {
-        // BYPASS: Always show the product if the user manually added it
-        if (r._manuel || r._custom) return true; 
-        
-        const pMatch=PRODS.find(x=>x.nom===r.nom);
-        const idV=r.idVariante||(pMatch?pMatch.idVariante:'');
-        return !(idV&&idVEnvoyes.has(idV));
-      });
+      const prodsNonCommandes = prods; 
       
       const fm=prodsNonCommandes.reduce((s,r)=>s+(qtySel(r)*(r.prix||0)),0);
       const aEnvoyer=prodsNonCommandes.length;
       
-      // 🚀 UPGRADE 2: Build the clean dropdown list for past POs
+      // 🚀 PRÉPARATION ACCORDION
+      const fSafe2 = f.replace(/'/g,"\\\\'");
+      const isCollapsed = PO_TOGGLE_STATE[f] === true;
+      const arrow = isCollapsed ? '▶' : '▼';
+      const displayStyle = isCollapsed ? 'none' : 'block';
+
       let dropdownHtml = '';
       if(dejaEnvoyes.length) {
-        const fSafe2 = f.replace(/'/g,"\\\\'");
         dropdownHtml = `
-          <div style="display:inline-flex; align-items:center; background:var(--grb); border:1px solid var(--gr); border-radius:6px; padding:2px; margin-left:10px;">
+          <div style="display:inline-flex; align-items:center; background:var(--grb); border:1px solid var(--gr); border-radius:6px; padding:2px;">
             <select id="sel-po-${idx}" style="background:transparent; border:none; font-size:12px; color:var(--gr); font-weight:600; outline:none; cursor:pointer; padding:4px;">
               <option value="" disabled selected>PO envoyés (${dejaEnvoyes.length})</option>
               ${dejaEnvoyes.map(e => `<option value="${e.poNumber}">${e.poNumber}</option>`).join('')}
@@ -1472,81 +1522,100 @@ function rPO(){
         `;
       }
 
-      html+=`<div style="margin-bottom:20px">
-        <div style="display:flex;align-items:center;gap:10px;margin-bottom:8px">
-          <span style="font-weight:600;font-size:13px;color:var(--t1)">${f}</span>
-          <span style="font-size:12px;color:var(--t3)">${aEnvoyer} produit(s) à commander</span>
-          ${fm>0?`<span style="margin-left:auto;font-weight:500;color:var(--br)">${fmtM(fm)}</span>`:''}
+      html+=`<div style="margin-bottom:16px; border:1px solid var(--b2); border-radius:8px; padding:12px; background:var(--w);">
+        
+        <!-- HEADER CLIQUABLE -->
+        <div style="display:flex; align-items:center; justify-content:space-between; gap:10px;">
+          <div style="display:flex; align-items:center; gap:8px; cursor:pointer; flex:1;" onclick="togglePOBlock('${fSafe2}', ${idx})">
+            <span id="po-arr-${idx}" style="font-size:12px; color:var(--t3); width:12px; text-align:center;">${arrow}</span>
+            <span style="font-weight:600; font-size:14px; color:var(--t1)">${f}</span>
+            <span style="font-size:12px; color:var(--t3); margin-left:4px;">${aEnvoyer} produit(s) à commander</span>
+            ${fm > 0 ? `<span style="margin-left:auto; font-weight:600; color:var(--br); margin-right:12px;">${fmtM(fm)}</span>` : ''}
+          </div>
           
-          <input type="date" id="date-po-${idx}" style="padding:5px 8px;border:1px solid var(--b2);border-radius:6px;font-size:12px;font-family:'Inter',sans-serif" title="Date de livraison (optionnel)">
-          
-          ${dropdownHtml}
-          
-          ${aEnvoyer>0?`<button class="fb" id="btn-po-${idx}" onclick="envoyerCommandeFournisseur(${idx},[${semaines.join(',')}])" style="margin-left:${dejaEnvoyes.length?'4px':'8px'}">Créer la commande</button>`:''}
+          <div style="display:flex; align-items:center; gap:8px;">
+            <input type="date" id="date-po-${idx}" style="padding:5px 8px; border:1px solid var(--b2); border-radius:6px; font-size:12px; font-family:'Inter', sans-serif" title="Date de livraison (optionnel)" onclick="event.stopPropagation()">
+            ${dropdownHtml}
+            ${aEnvoyer > 0 ? `<button class="fb" id="btn-po-${idx}" onclick="envoyerCommandeFournisseur(${idx},[${semaines.join(',')}])">Créer la commande</button>` : ''}
+          </div>
         </div>
         
-        ${aEnvoyer > 0 ? `
-        <div class="tw"><table>
-          <thead><tr><th>Produit</th><th>Cat.</th><th style="text-align:right">Stock actuel</th><th>Délai</th>
-          ${wks.map(i=>`<th style="text-align:center">S${String(i).padStart(2,'0')}${semaines.includes(i)?' ✎':''}</th>`).join('')}
-          <th style="text-align:right">Total cmd</th><th style="text-align:center">Sem. couvertes</th><th style="text-align:right">Coût unit.</th><th style="text-align:right">Montant</th>
-          </tr></thead>
-          <tbody>${prodsNonCommandes.map(r=>{
-            const fournSafe=(r.fourn||'').replace(/'/g,"\\\\'");
-            const idSafe=(r.idVariante||'').replace(/'/g,"\\\\'");
-            const nomSafe=r.nom.replace(/'/g,"\\\\'");
-            const special=r._manuel||r._custom;
-            return `<tr${special?' style="background:var(--amb)"':''}>
-            <td>
-              <div class="pn">${r.nom}</div>
-              ${(()=>{const p=PRODS.find(x=>x.nom===r.nom);return p&&p.variante?`<div class="pv">${p.variante}</div>`:''})()}
-              <div style="margin-top: 3px; display: block;">
-                ${MOQ_MAP[idSafe] > 1 ? `<span style="background:var(--amb); color:var(--am); padding:2px 6px; border-radius:4px; font-size:10px; font-weight:bold; margin-right:6px;">📦 Lot de ${MOQ_MAP[idSafe]}</span>` : `<span style="color:var(--t3); font-size:10px; font-weight:600; margin-right:6px;">Pas de minimum</span>`}
-                ${r._manuel?`<span style="font-size:10px;color:var(--am);font-weight:600">(ajout manuel) <a href="#" onclick="retirerExtra('${fournSafe}','${idSafe}');return false;" style="color:var(--re);text-decoration:underline">retirer</a></span>`:''}
-                ${r._custom?`<span style="font-size:10px;color:var(--am);font-weight:600">(produit personnalisé) <a href="#" onclick="retirerCustom('${fournSafe}','${r.customId}');return false;" style="color:var(--re);text-decoration:underline">retirer</a></span>`:''}
-                ${(!special)?`<span style="font-size:10px;color:var(--t3);font-weight:600">(Ajout Forecast) <a href="#" onclick="ignorerForecast('${fournSafe}','${idSafe}');return false;" style="color:var(--re);text-decoration:underline">retirer</a></span>`:''}
-              </div>
-            </td>
-            <td>${bP(r.cat)}</td>
-            <td style="text-align:right">${(()=>{const p=PRODS.find(x=>x.nom===r.nom);return p?`<span class="${sc(p.stock)}">${fmt(p.stock)}</span>`:'—';})()}</td>
-            <td style="text-align:center;font-size:12px">${r.delai>0?r.delai+' sem.':'—'}</td>
-            ${wks.map(i=>{
-              if(semaines.includes(i)){
-                const val=r.sems[i]||0;
-                const style=special?'border:1px solid var(--am)':'border:1px solid var(--b2)';
-                const tipo=r._custom?'custom':(r._manuel?'manuel':'normal');
-                
-                const moq = MOQ_MAP[idSafe] || 1; 
-                let validationBadge = '';
-                
-                // Real-time Traffic Light Math
-                if (moq > 1 && val > 0) {
-                    if (val % moq === 0) {
-                        validationBadge = `<div style="color:var(--gr); font-size:10px; font-weight:bold; margin-top:4px;">✅ OK</div>`;
-                    } else {
-                        validationBadge = `<div style="color:var(--re); font-size:10px; font-weight:bold; margin-top:4px;">⚠️ Invalide</div>`;
-                    }
+        <!-- CORPS COLLAPSIBLE -->
+        <div id="po-body-${idx}" style="display:${displayStyle}; margin-top:12px; padding-top:12px; border-top:1px solid var(--b1);">
+          ${aEnvoyer > 0 ? `
+          <div class="tw"><table>
+            <thead><tr><th>Produit</th><th>Cat.</th><th style="text-align:right">Stock actuel</th><th>Délai</th>
+            ${wks.map(i=>`<th style="text-align:center">S${String(i).padStart(2,'0')}${semaines.includes(i)?' ✎':''}</th>`).join('')}
+            <th style="text-align:right">Total cmd</th><th style="text-align:center">Sem. couvertes</th><th style="text-align:right">Coût unit.</th><th style="text-align:right">Montant</th>
+            </tr></thead>
+            <tbody>${prodsNonCommandes.map(r=>{
+              const fournSafe=(r.fourn||'').replace(/'/g,"\\\\'");
+              const idSafe=(r.idVariante||'').replace(/'/g,"\\\\'");
+              const nomSafe=r.nom.replace(/'/g,"\\\\'");
+              const special=r._manuel||r._custom;
+              return `<tr${special?' style="background:var(--amb)"':''}>
+              <td>
+                ${(()=>{
+                    const p = PRODS.find(x => x.nom === r.nom);
+                    const cleanNom = (p && p.variante && r.nom.endsWith(' - ' + p.variante)) ? r.nom.slice(0, -(p.variante.length + 3)) : r.nom;
+                    return `<div class="pn">${cleanNom}</div>${p && p.variante ? `<div class="pv">${p.variante}</div>` : ''}`;
+                })()}
+                <div style="margin-top: 3px; display: block;">
+                  ${(()=>{
+                      const existingPOs = (PO_ENVOYES[f] || []).filter(e => e.lignes.some(l => l.idVariante === idSafe)).map(e => e.poNumber);
+                      return existingPOs.length > 0 ? `<div style="color:var(--am); font-size:10px; font-weight:bold; margin-bottom:4px;">⚠️ Déjà dans PO: ${existingPOs.join(', ')}</div>` : '';
+                  })()}
+                  ${r._manuel?`<span style="font-size:10px;color:var(--am);font-weight:600">(ajout manuel) <a href="#" onclick="retirerExtra('${fournSafe}','${idSafe}');return false;" style="color:var(--re);text-decoration:underline">retirer</a></span>`:''}
+                  ${r._custom?`<span style="font-size:10px;color:var(--am);font-weight:600">(produit personnalisé) <a href="#" onclick="retirerCustom('${fournSafe}','${r.customId}');return false;" style="color:var(--re);text-decoration:underline">retirer</a></span>`:''}
+                  ${(!special)?`<span style="font-size:10px;color:var(--t3);font-weight:600">(Ajout Forecast) <a href="#" onclick="ignorerForecast('${fournSafe}','${idSafe}');return false;" style="color:var(--re);text-decoration:underline">retirer</a></span>`:''}
+                </div>
+              </td>
+              <td>${bP(r.cat)}</td>
+              <td style="text-align:right">${(()=>{const p=PRODS.find(x=>x.nom===r.nom);return p?`<span class="${sc(p.stock)}">${fmt(p.stock)}</span>`:'—';})()}</td>
+              <td style="text-align:center;font-size:12px">${r.delai>0?r.delai+' sem.':'—'}</td>
+              ${wks.map(i=>{
+                if(semaines.includes(i)){
+                  const val=r.sems[i]||0;
+                  const style=special?'border:1px solid var(--am)':'border:1px solid var(--b2)';
+                  const tipo=r._custom?'custom':(r._manuel?'manuel':'normal');
+                  
+                  const moq = MOQ_MAP[idSafe] || 1; 
+                  let validationBadge = '';
+                  let moqBadge = moq > 1 
+                      ? `<div style="background:var(--amb); color:var(--am); padding:2px 4px; border-radius:4px; font-size:9px; font-weight:bold; margin-top:4px; display:inline-block;">📦 Lot de ${moq}</div>` 
+                      : `<div style="color:var(--t3); font-size:9px; font-weight:600; margin-top:4px;">Pas de min.</div>`;
+                  
+                  if (moq > 1 && val > 0) {
+                      if (val % moq === 0) {
+                          validationBadge = `<div style="color:var(--gr); font-size:10px; font-weight:bold; margin-top:4px;">✅ OK</div>`;
+                      } else {
+                          validationBadge = `<div style="color:var(--re); font-size:10px; font-weight:bold; margin-top:4px;">⚠️ Invalide</div>`;
+                      }
+                  }
+                  
+                  return `<td style="text-align:center; vertical-align:top; padding-top:8px;">
+                      <input type="number" min="0" step="${moq}" value="${val}" style="width:50px;padding:2px 4px;${style};border-radius:4px;font-size:12px;text-align:center" onchange="majQuantitePO('${fournSafe}','${idSafe}','${nomSafe}',${i},this.value,'${tipo}','${r.customId||''}')">
+                      <div style="display:flex; flex-direction:column; align-items:center;">
+                          ${moqBadge}
+                          ${validationBadge}
+                      </div>
+                  </td>`;
                 }
-                
-                return `<td style="text-align:center; vertical-align:top; padding-top:8px;">
-                    <input type="number" min="0" step="${moq}" value="${val}" style="width:50px;padding:2px 4px;${style};border-radius:4px;font-size:12px;text-align:center" onchange="majQuantitePO('${fournSafe}','${idSafe}','${nomSafe}',${i},this.value,'${tipo}','${r.customId||''}')">
-                    ${validationBadge}
-                </td>`;
-              }
-              if(special)return `<td style="text-align:center;color:var(--t3)">—</td>`;
-              const v=r.sems[i]||0;
-              return v>0?`<td style="text-align:center;background:var(--amb);color:var(--am);font-weight:600;font-size:12px;padding:8px 10px">${fmt(v)}</td>`:
-                         `<td style="text-align:center;color:var(--t3)">—</td>`;
-            }).join('')}
-            <td style="text-align:right;font-weight:500">${r.tc>0?fmt(r.tc):'—'}</td>
-            <td style="text-align:center">${(()=>{const qty=qtySel(r);const vm=r.vm||0;const p=PRODS.find(x=>x.nom===r.nom);const stockAct=p?p.stock:0;const enCmd=p?(p.en_cmd||0):0;if(qty>0&&vm>0){const wksCov=Math.round((stockAct+enCmd+qty)/vm);const ok=wksCov>=(r.delai||0);return `<span style="font-weight:600;color:${ok?'var(--gr)':'var(--re)'}">${wksCov} sem.</span>`;}return '<span style="color:var(--t3)">—</span>';})()}</td>
-            <td style="text-align:right"><input type="number" min="0" step="0.01" value="${r.prix>0?r.prix.toFixed(2):''}" placeholder="—" style="width:75px;padding:2px 4px;border:1px solid var(--b2);border-radius:4px;font-size:12px;text-align:right;color:var(--t2)" onchange="majPrixPO('${fournSafe}','${nomSafe}',this.value)"></td>
-            <td style="text-align:right;font-weight:500;color:var(--br)">${r.prix>0?fmtM(qtySel(r)*r.prix):'—'}</td>
-          </tr>`;}).join('')}</tbody>
-        </table></div>` : ''}
-        
-        ${renderHorsPO(f)}
-        ${renderAjoutLibre(f,'b'+blocIdx)}
+                if(special)return `<td style="text-align:center;color:var(--t3)">—</td>`;
+                const v=r.sems[i]||0;
+                return v>0?`<td style="text-align:center;background:var(--amb);color:var(--am);font-weight:600;font-size:12px;padding:8px 10px">${fmt(v)}</td>`:
+                           `<td style="text-align:center;color:var(--t3)">—</td>`;
+              }).join('')}
+              <td style="text-align:right;font-weight:500">${r.tc>0?fmt(r.tc):'—'}</td>
+              <td style="text-align:center">${(()=>{const qty=qtySel(r);const vm=r.vm||0;const p=PRODS.find(x=>x.nom===r.nom);const stockAct=p?p.stock:0;const enCmd=p?(p.en_cmd||0):0;if(qty>0&&vm>0){const wksCov=Math.round((stockAct+enCmd+qty)/vm);const ok=wksCov>=(r.delai||0);return `<span style="font-weight:600;color:${ok?'var(--gr)':'var(--re)'}">${wksCov} sem.</span>`;}return '<span style="color:var(--t3)">—</span>';})()}</td>
+              <td style="text-align:right"><input type="number" min="0" step="0.01" value="${r.prix>0?r.prix.toFixed(2):''}" placeholder="—" style="width:75px;padding:2px 4px;border:1px solid var(--b2);border-radius:4px;font-size:12px;text-align:right;color:var(--t2)" onchange="majPrixPO('${fournSafe}','${nomSafe}',this.value)"></td>
+              <td style="text-align:right;font-weight:500;color:var(--br)">${r.prix>0?fmtM(qtySel(r)*r.prix):'—'}</td>
+            </tr>`;}).join('')}</tbody>
+          </table></div>` : ''}
+          
+          ${renderHorsPO(f)}
+          ${renderAjoutLibre(f,'b'+blocIdx)}
+        </div>
       </div>`;
     }
   });
@@ -2358,11 +2427,25 @@ async function envoyerCommandeFournisseur(idx, semaines){
   const lignes = prods.map(r=>{
     const p = PRODS.find(x=>x.nom===r.nom);
     return { idVariante: r.idVariante || (p ? p.idVariante : ''), quantite: sems.reduce((s,sw)=>s+(r.sems[sw]||0),0), nom:r.nom, variante:p&&p.variante?p.variante:'', sku:p&&p.skuFourn?p.skuFourn:'' };
-  }).filter(l => l.idVariante && l.quantite > 0 && !idVEnvoyes.has(l.idVariante));
+  }).filter(l => l.idVariante && l.quantite > 0);
 
   if(!lignes.length){
-    alert('Tous les produits de ce fournisseur ont déjà été commandés (voir les PO déjà créés ci-dessus). Ajoute un nouveau produit avant de recommander.');
+    alert('Veuillez ajouter des quantités valides avant de créer la commande.');
     return;
+  }
+
+  // 🚀 AVERTISSEMENT DE DOUBLE COMMANDE
+  const doubles = lignes.filter(l => idVEnvoyes.has(l.idVariante));
+  if (doubles.length > 0) {
+      const msgs = doubles.map(l => {
+          const poList = (PO_ENVOYES[fourn] || []).filter(e => e.lignes.some(el => el.idVariante === l.idVariante)).map(e => e.poNumber);
+          return `- ${l.nom} (Dans PO: ${poList.join(', ')})`;
+      });
+      
+      // Met le script en pause et demande la permission à l'utilisateur
+      if (!confirm("⚠️ ATTENTION : Les produits suivants sont déjà dans une commande existante :\n\n" + msgs.join('\n') + "\n\nÊtes-vous certain de vouloir créer une DOUBLE COMMANDE pour ces articles ?")) {
+          return; // Annule l'envoi
+      }
   }
 
   // VERIFICATION DES MULTIPLES (MOQ HARD BLOCK)
@@ -3006,6 +3089,23 @@ function majPrixPO(fourn, nom, val){
         PRIX_OVERRIDE[kOv] = Math.max(0, v);
     }
     rPO();
+}
+
+
+function togglePOBlock(fournisseur, idx) {
+    // Inverse l'état en mémoire (si undefined, devient true = fermé)
+    PO_TOGGLE_STATE[fournisseur] = !PO_TOGGLE_STATE[fournisseur];
+    
+    const body = document.getElementById('po-body-' + idx);
+    const arr = document.getElementById('po-arr-' + idx);
+    
+    if (PO_TOGGLE_STATE[fournisseur]) {
+        body.style.display = 'none';
+        arr.textContent = '▶';
+    } else {
+        body.style.display = 'block';
+        arr.textContent = '▼';
+    }
 }
 
 // IGNITION: Starts the entire process when the file is loaded
