@@ -60,6 +60,7 @@ window.addEventListener('unhandledrejection', function(event) {
 let PRODS=[],STOCKY=[],TRANSFERTS=[],RECEPTIONS=[],PREVISION=[],PROMOS=[],BUDGET=[],PRIX_MAP={},PRIX_ID_MAP={},COUT_MAP={},DELAIS_MAP={},FORECAST=[];
 // Phonebook specifically to store custom notes/comments about specific products.
 let COMMENTS_MAP={};
+let MOQ_MAP={};
 
 // Phonebook for last year's sales (Ventes N-1 in Forecast V4) using clean, standardized names.
 let VN1_NORM={};
@@ -87,6 +88,7 @@ let PF='all', CV='alertes', SEL_BUDGET=null;
 let PO_EXTRAS={}; 
 let PO_CUSTOM={}; 
 let PRIX_OVERRIDE={}; 
+let PO_IGNORED={};
 const PRIX_FALLBACK_ID={"39423037636697":19.83,"39423037669465":158.64,"39423036424281":22.32,"39423036457049":178.56,"39505906171993":4.61,"39505906204761":46.1,"39505894735961":4.03,"39505894768729":47.0,"39286587293785":1968.6,"39379097354329":2852.6,"31133707206745":3846.0,"31133856268377":1505.0,"31133862428761":1606.0,"39505894047833":4.61,"39505894080601":46.1,"32062701142105":8696.25,"40247089332313":15.0,"40247089365081":27.0,"43204120707161":90.0,"32098752987225":806.25,"32102521372761":1668.75,"32102714474585":1946.25,"32102741082201":1308.75,"42622009081945":795.0,"42622009114713":821.25,"32113311580249":22.0,"32113329209433":15.0,"40509087449177":5810.0,"42153932980313":5810.0,"42153933013081":6125.0,"32163205382233":7341.75,"32177744183385":723.75,"42409361932377":1931.25,"42409361899609":2096.25,"42409361997913":2096.25,"32239440527449":1.5,"39286643425369":1450.0,"32382263394393":430.0,"32382263427161":430.0,"32382263459929":430.0,"39751786692697":514.5,"40467509608537":430.0,"41543633502297":430.0,"41543634288729":430.0,"40106547052633":26.21,"40106547085401":67.46,"42151907557465":19.46,"42151907590233":52.46,"32331606130777":62.6,"43204146921561":20.21,"43204146954329":121.26,"32363213258841":32.0,"43269554864217":10.0,"43269554896985":60.0,"32363222597721":10.0,"39471519531097":10.23,"39471519563865":62.0,"40430742110297":62.0,"40430742143065":50.46,"39471498657881":10.23,"40142641954905":72.0,"40430750203993":61.38,"40430750236761":50.46,"32391986380889":74.25,"39286560686169":2026.0,"39286571565145":2096.0,"39286575890521":2036.6,"39288837144665":281.25,"39768828575833":9345.0,"39768828608601":12350.0,"39768828674137":12350.0,"39768830017625":8872.0,"39768830083161":9068.0,"39768830115929":9068.0,"40523997773913":10000.0,"39305219571801":142.4,"39531804754009":76.5,"39531804786777":79.5,"39531804819545":84.0,"39305235365977":24.75,"39305244639321":190.5,"39305477226585":910.0,"39312028958809":31.5,"39312071229529":55.99,"40398413037657":20.0,"39312179101785":3.0,"39312381378649":15.0,"39797854797913":28.44,"39797854830681":33.12,"39797854863449":37.53,"39349384052825":296.25,"39349384085593":296.25,"40246770499673":371.25,"40246770466905":371.25,"39349445328985":562.5,"39356774416473":936.0,"39372578816089":115.0,"40306923602009":5.0,"41736710946905":9.22,"42190923956313":9.0,"39778636267609":7.0,"39379730399321":74.25,"39390188109913":4646.25,"39399568408665":52.46,"39399569031257":33.71,"39399570047065":32.21,"39399570243673":32.21,"39399574274137":104.96,"39420458369113":40.5,"39424787185753":29.25,"39424818643033":106.5,"42270065262681":48.0,"42270065229913":48.0,"39434677190745":11.9,"39434702782553":34.94,"39436545163353":23.03,"39438869921881":31.5,"39438923890777":73.5,"39522756427865":52.49,"39522756460633":55.99,"42727921188953":32.0,"42727921221721":32.0,"42727921254489":35.0,"40257060438105":83.25,"40257060470873":83.25,"40083939033177":3896.25,"40083939000409":3746.25,"42371511976025":8246.25,"42371512008793":8696.25,"39522762981465":52.49,"39522763014233":55.99,"39522837725273":69.99,"39531815403609":69.0,"43207052755033":63.75,"43207052787801":382.5,"39531874615385":57.71,"39668678033497":840.0,"39548266217561":840.0,"42031468970073":890.0,"39550847058009":51.75,"39550847090777":51.75,"39550896537689":927.99,"39550924554329":3519.0,"43273461694553":385.6,"43273461727321":385.6,"42484376469593":1343.99,"41827384983641":1343.99,"41827384950873":1343.99,"41568712753241":1535.99,"39592982511705":1535.99,"42484372570201":1535.99,"40401995399257":635.0,"40408832639065":675.0,"40401995432025":635.0,"39624643543129":32.0,"39624653242457":114.0,"40561531289689":201.6,"42849037221977":198.0,"40561531322457":198.0,"42849037254745":198.0,"40391467958361":1100.0,"40391513210969":2184.0,"40391513243737":2184.0,"40516151476313":410.0,"40516151443545":410.0,"41037192265817":410.0,"41037192331353":410.0,"42030647541849":410.0,"41037192298585":410.0,"41037274447961":992.0,"41037274480729":992.0,"40516235001945":2310.0,"41037280018521":3009.3,"41037280084057":3009.3,"41037280116825":3009.3,"41037280149593":3009.3,"40516293001305":630.0,"40903080476761":724.0,"41037176242265":724.0,"40903080443993":724.0,"41037180174425":724.0,"41037176209497":724.0,"42892182519897":724.0,"40516308074585":744.0,"40516567367769":1499.99,"42260065779801":24.0,"42260065812569":33.0,"40516616388697":72.0,"40516626055257":15.0,"40516639260761":15.0};
 let PO_ENVOYES={};
 let MODIF_PO_LINES=[];
@@ -359,6 +361,28 @@ async function loadData(){
       if(idAbc)ABC_ID_MAP[idAbc]=pareto;
       if(nom)ABC_MAP[nom]=pareto;
     });
+
+    // -----------------------------------------------------------------
+    // CHARGEMENT DES TAILLES DE LOTS (MOQ)
+    // -----------------------------------------------------------------
+    MOQ_MAP = {};
+    // Find the tab regardless of exact capitalization or trailing spaces
+    const ongletMOQ = Object.keys(raw).find(k => k.toLowerCase().trim() === 'tailles de lot');
+    
+    if (ongletMOQ && raw[ongletMOQ]) {
+        raw[ongletMOQ].slice(1).forEach(r => {
+            // Check that columns D (3) and E (4) actually exist in the row
+            if (r.length > 4) {
+                const idLot = String(r[3] || '').replace(/\D/g, ''); 
+                const qtyLot = parseInt(r[4]) || 1;                  
+                if (idLot && qtyLot > 1) {
+                    MOQ_MAP[idLot] = qtyLot;
+                }
+            }
+        });
+    } else {
+        console.warn("⚠️ Onglet 'Tailles de Lot' introuvable dans les données Google Sheets.");
+    }
 
 
     // =================================================================
@@ -1241,9 +1265,14 @@ function rPO(){
   }
   
   const fourn=fpo?.value||'';
+
   const rowsCalc=PREVISION.filter(r=>{
     if(!equipeMatch(r.fourn))return false;
     if(fourn&&r.fourn!==fourn)return false;
+    
+    // NEW RULE: Check if the user manually hid this forecast item
+    if(PO_IGNORED[r.fourn] && PO_IGNORED[r.fourn].includes(r.idVariante)) return false;
+    
     return semaines.some(sw=>r.sems[sw]>0);
   });
   
@@ -1414,8 +1443,11 @@ function rPO(){
       const dejaEnvoyes=PO_ENVOYES[f]||[];
       const idVEnvoyes=idVEnvoyesFor(f);
       
-      // 🚀 UPGRADE 1: Filter out already ordered products so they vanish from the table
+      /// Filter out already ordered products so they vanish from the table
       const prodsNonCommandes = prods.filter(r => {
+        // BYPASS: Always show the product if the user manually added it
+        if (r._manuel || r._custom) return true; 
+        
         const pMatch=PRODS.find(x=>x.nom===r.nom);
         const idV=r.idVariante||(pMatch?pMatch.idVariante:'');
         return !(idV&&idVEnvoyes.has(idV));
@@ -1465,7 +1497,16 @@ function rPO(){
             const nomSafe=r.nom.replace(/'/g,"\\\\'");
             const special=r._manuel||r._custom;
             return `<tr${special?' style="background:var(--amb)"':''}>
-            <td><div class="pn">${r.nom}${r._manuel?` <span style="font-size:10px;color:var(--am);font-weight:600">(ajout manuel) <a href="#" onclick="retirerExtra('${fournSafe}','${idSafe}');return false;" style="color:var(--re);text-decoration:underline">retirer</a></span>`:''}${r._custom?` <span style="font-size:10px;color:var(--am);font-weight:600">(produit personnalisé) <a href="#" onclick="retirerCustom('${fournSafe}','${r.customId}');return false;" style="color:var(--re);text-decoration:underline">retirer</a></span>`:''}</div>${(()=>{const p=PRODS.find(x=>x.nom===r.nom);return p&&p.variante?`<div class="pv">${p.variante}</div>`:''})()}</td>
+            <td>
+              <div class="pn">${r.nom}</div>
+              ${(()=>{const p=PRODS.find(x=>x.nom===r.nom);return p&&p.variante?`<div class="pv">${p.variante}</div>`:''})()}
+              <div style="margin-top: 3px; display: block;">
+                ${MOQ_MAP[idSafe] > 1 ? `<span style="background:var(--amb); color:var(--am); padding:2px 6px; border-radius:4px; font-size:10px; font-weight:bold; margin-right:6px;">📦 Lot de ${MOQ_MAP[idSafe]}</span>` : `<span style="color:var(--t3); font-size:10px; font-weight:600; margin-right:6px;">Pas de minimum</span>`}
+                ${r._manuel?`<span style="font-size:10px;color:var(--am);font-weight:600">(ajout manuel) <a href="#" onclick="retirerExtra('${fournSafe}','${idSafe}');return false;" style="color:var(--re);text-decoration:underline">retirer</a></span>`:''}
+                ${r._custom?`<span style="font-size:10px;color:var(--am);font-weight:600">(produit personnalisé) <a href="#" onclick="retirerCustom('${fournSafe}','${r.customId}');return false;" style="color:var(--re);text-decoration:underline">retirer</a></span>`:''}
+                ${(!special)?`<span style="font-size:10px;color:var(--t3);font-weight:600">(Ajout Forecast) <a href="#" onclick="ignorerForecast('${fournSafe}','${idSafe}');return false;" style="color:var(--re);text-decoration:underline">retirer</a></span>`:''}
+              </div>
+            </td>
             <td>${bP(r.cat)}</td>
             <td style="text-align:right">${(()=>{const p=PRODS.find(x=>x.nom===r.nom);return p?`<span class="${sc(p.stock)}">${fmt(p.stock)}</span>`:'—';})()}</td>
             <td style="text-align:center;font-size:12px">${r.delai>0?r.delai+' sem.':'—'}</td>
@@ -1474,7 +1515,23 @@ function rPO(){
                 const val=r.sems[i]||0;
                 const style=special?'border:1px solid var(--am)':'border:1px solid var(--b2)';
                 const tipo=r._custom?'custom':(r._manuel?'manuel':'normal');
-                return `<td style="text-align:center"><input type="number" min="0" value="${val}" style="width:50px;padding:2px 4px;${style};border-radius:4px;font-size:12px;text-align:center" onchange="majQuantitePO('${fournSafe}','${idSafe}','${nomSafe}',${i},this.value,'${tipo}','${r.customId||''}')"></td>`;
+                
+                const moq = MOQ_MAP[idSafe] || 1; 
+                let validationBadge = '';
+                
+                // Real-time Traffic Light Math
+                if (moq > 1 && val > 0) {
+                    if (val % moq === 0) {
+                        validationBadge = `<div style="color:var(--gr); font-size:10px; font-weight:bold; margin-top:4px;">✅ OK</div>`;
+                    } else {
+                        validationBadge = `<div style="color:var(--re); font-size:10px; font-weight:bold; margin-top:4px;">⚠️ Invalide</div>`;
+                    }
+                }
+                
+                return `<td style="text-align:center; vertical-align:top; padding-top:8px;">
+                    <input type="number" min="0" step="${moq}" value="${val}" style="width:50px;padding:2px 4px;${style};border-radius:4px;font-size:12px;text-align:center" onchange="majQuantitePO('${fournSafe}','${idSafe}','${nomSafe}',${i},this.value,'${tipo}','${r.customId||''}')">
+                    ${validationBadge}
+                </td>`;
               }
               if(special)return `<td style="text-align:center;color:var(--t3)">—</td>`;
               const v=r.sems[i]||0;
@@ -2308,6 +2365,15 @@ async function envoyerCommandeFournisseur(idx, semaines){
     return;
   }
 
+  // VERIFICATION DES MULTIPLES (MOQ HARD BLOCK)
+  for (let l of lignes) {
+      const moqRequis = MOQ_MAP[l.idVariante] || 1;
+      if (moqRequis > 1 && l.quantite % moqRequis !== 0) {
+          alert(`⚠️ Arrêt : La quantité pour "${l.nom}" (${l.quantite}) n'est pas un multiple de ${moqRequis}. La commande a été annulée. Modifiez la quantité pour correspondre au lot.`);
+          return; // Instantly kills the script and stops the PO creation
+      }
+  }
+
   const btn = document.getElementById('btn-po-' + idx);
   if(btn){ btn.disabled = true; btn.textContent = 'Envoi…'; }
 
@@ -2785,6 +2851,161 @@ async function envoyerCommandeManuelle(){
     btn.disabled = false;
     btn.textContent = 'Créer la commande';
   }
+}
+
+// =====================================================================
+// FONCTIONS D'AJOUT MANUEL ET PERSONNALISÉ (DANS LA VUE PO)
+// =====================================================================
+
+// 1. Fait fonctionner la barre de recherche "Ajouter un autre produit..."
+function rechercherProduitBlock(fourn, blocId){
+    const input = document.getElementById('search-'+blocId);
+    const resDiv = document.getElementById('search-res-'+blocId);
+    const q = (input?.value||'').toLowerCase().trim();
+    
+    if(!q){ resDiv.style.display='none'; resDiv.innerHTML=''; return; }
+
+    // Cherche dans le catalogue les produits du fournisseur qui correspondent
+    const matches = PRODS.filter(p => p.fourn === fourn && p.idVariante && p.nom.toLowerCase().includes(q)).slice(0,8);
+
+    if(!matches.length){
+        resDiv.style.display='block';
+        resDiv.innerHTML='<div style="padding:10px;color:var(--t3);font-size:12px">Aucun résultat trouvé</div>';
+        return;
+    }
+
+    resDiv.style.display='block';
+    resDiv.innerHTML = matches.map(p => {
+        // Strict escaping to prevent names with quotes from breaking the HTML button
+        const idSafe = String(p.idVariante).replace(/'/g,"\\'").replace(/"/g,"&quot;");
+        const fournSafe = String(fourn).replace(/'/g,"\\'").replace(/"/g,"&quot;");
+        
+        return `<div style="padding:8px 12px;border-bottom:1px solid var(--b1);font-size:12px;display:flex;justify-content:space-between;align-items:center;">
+            <div style="flex:1;">
+                <div style="font-weight:500">${p.nom}</div>
+                ${p.variante ? `<div style="color:var(--t3);font-size:11px">${p.variante}</div>` : ''}
+            </div>
+            <button class="fb" style="padding:4px 10px;font-size:11px;cursor:pointer;" onclick="ajouterProduitBlock('${fournSafe}','${idSafe}')">+ Ajouter</button>
+        </div>`;
+    }).join('');
+}
+
+// 2. Ajoute le produit trouvé par la barre de recherche au tableau PO
+function ajouterProduitBlock(fourn, idVariante){
+    const p = PRODS.find(x => x.idVariante === idVariante);
+    if(!p) {
+        alert("Erreur : Produit introuvable.");
+        return;
+    }
+    
+    if(!PO_EXTRAS[fourn]) PO_EXTRAS[fourn] = [];
+    
+    // Si le produit est déjà ajouté, on augmente juste la quantité
+    const existing = PO_EXTRAS[fourn].find(x => x.idVariante === idVariante);
+    if(existing) {
+        existing.quantite += 1;
+    } else {
+        PO_EXTRAS[fourn].push({ idVariante: idVariante, nom: p.nom, quantite: 1 });
+    }
+    
+    // Force the search bar to clear itself immediately so you visually see the success
+    document.querySelectorAll('[id^="search-res-"]').forEach(el => el.style.display = 'none');
+    document.querySelectorAll('[id^="search-b"]').forEach(el => el.value = '');
+    
+    rPO(); // Rafraîchit l'écran pour dessiner la nouvelle ligne
+}
+
+// 3. Fait fonctionner le bouton "+ Ajouter" dans la boîte d'alerte jaune
+function ajouterHorsPO(idVariante){
+    const p = PRODS.find(x => x.idVariante === idVariante);
+    if(!p) return;
+    
+    const input = document.getElementById('qty-hp-'+idVariante);
+    const qte = input ? (parseInt(input.value)||1) : 1;
+    const fourn = p.fourn;
+    
+    if(!PO_EXTRAS[fourn]) PO_EXTRAS[fourn] = [];
+    
+    const existing = PO_EXTRAS[fourn].find(x => x.idVariante === idVariante);
+    if(existing) {
+        existing.quantite += qte;
+    } else {
+        PO_EXTRAS[fourn].push({ idVariante: idVariante, nom: p.nom, quantite: qte });
+    }
+    rPO();
+}
+
+// 4. Fait fonctionner le bouton "+ Produit personnalisé" sous le tableau
+function ajouterProduitPersonnalise(fourn, blocId){
+    const nomInput = document.getElementById('cust-nom-'+blocId);
+    const prixInput = document.getElementById('cust-prix-'+blocId);
+    const qteInput = document.getElementById('cust-qte-'+blocId);
+    
+    const nom = (nomInput?.value||'').trim();
+    const prix = Math.max(0, parseFloat(prixInput?.value)||0);
+    const qte = Math.max(1, parseInt(qteInput?.value)||1);
+    
+    if(!nom){ alert('Veuillez indiquer un nom de produit.'); return; }
+    
+    if(!PO_CUSTOM[fourn]) PO_CUSTOM[fourn] = [];
+    PO_CUSTOM[fourn].push({
+        id: 'custom-' + Date.now(),
+        nom: nom,
+        prix: prix,
+        quantite: qte
+    });
+    rPO();
+}
+
+// 5. Permet de retirer un produit manuel ou personnalisé du tableau
+function retirerExtra(fourn, idVariante){
+    if(!PO_EXTRAS[fourn]) return;
+    PO_EXTRAS[fourn] = PO_EXTRAS[fourn].filter(x => x.idVariante !== idVariante);
+    rPO();
+}
+
+function retirerCustom(fourn, customId){
+    if(!PO_CUSTOM[fourn]) return;
+    PO_CUSTOM[fourn] = PO_CUSTOM[fourn].filter(x => x.id !== customId);
+    rPO();
+}
+
+// 5.5 Permet de masquer un produit généré par le forecast
+function ignorerForecast(fourn, idVariante){
+    if(!PO_IGNORED[fourn]) PO_IGNORED[fourn] = [];
+    if(!PO_IGNORED[fourn].includes(idVariante)){
+        PO_IGNORED[fourn].push(idVariante);
+    }
+    rPO(); // Rafraîchit l'écran pour faire disparaître la ligne
+}
+
+// 6. Recalcule les mathématiques si tu modifies la quantité ou le prix à la main dans le tableau
+function majQuantitePO(fourn, idVariante, nom, sem, val, tipo, customId){
+    const v = Math.max(0, parseInt(val)||0);
+    if(tipo === 'manuel'){
+        if(!PO_EXTRAS[fourn]) PO_EXTRAS[fourn] = [];
+        let ex = PO_EXTRAS[fourn].find(x => x.idVariante === idVariante);
+        if(ex) ex.quantite = v;
+    } else if(tipo === 'custom'){
+        if(!PO_CUSTOM[fourn]) PO_CUSTOM[fourn] = [];
+        let cu = PO_CUSTOM[fourn].find(x => x.id === customId);
+        if(cu) cu.quantite = v;
+    } else {
+        let r = PREVISION.find(x => x.fourn === fourn && (idVariante ? x.idVariante === idVariante : x.nom === nom));
+        if(r) r.sems[sem] = v;
+    }
+    rPO();
+}
+
+function majPrixPO(fourn, nom, val){
+    const kOv = fourn + '||' + nom;
+    const v = parseFloat(val);
+    if(isNaN(v)) {
+        delete PRIX_OVERRIDE[kOv];
+    } else {
+        PRIX_OVERRIDE[kOv] = Math.max(0, v);
+    }
+    rPO();
 }
 
 // IGNITION: Starts the entire process when the file is loaded
