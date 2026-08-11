@@ -109,7 +109,8 @@ let SORTS={
   fc:{col:'nom',dir:1},
   pr:{col:'nom',dir:1},
   b:{col:'sn',dir:1},
-  d:{col:'capital',dir:-1}
+  d:{col:'capital',dir:-1},
+  sb:{col:'vendu',dir:-1}
 };
 // Temporary buckets to hold the specific, filtered results for the Alertes and Stocks tables.
 let PRODS_A=[],PRODS_S=[];
@@ -137,6 +138,25 @@ let EQUIPE_FILTER='';
 // ---------------------------------------------------------
 // "mini-tool" to call its name whenever we need it
 // The Data Cleaners, The Formatters, The Visual Decorators, and The Team Filters.
+
+// Convertit le calendrier retail (Dimanche - Samedi) en index de mois (0-11)
+function getMonthFromCompanyWeek(week, year) {
+    if (year === 2026) {
+        // S01 2026 commence le Dimanche 28 Décembre 2025
+        const dateDebutSemaine = new Date(2025, 11, 28 + (week - 1) * 7);
+        
+        // Pour gérer les semaines à cheval sur deux mois (ex: 26 Juillet au 1er Août),
+        // on ajoute 3 jours (Mercredi) pour attribuer la semaine au mois qui possède la majorité des jours.
+        dateDebutSemaine.setDate(dateDebutSemaine.getDate() + 3);
+        
+        return dateDebutSemaine.getMonth(); 
+    }
+    
+    // Fallback de sécurité basique pour les autres années
+    const simpleDate = new Date(year, 0, 1 + (week - 1) * 7);
+    return simpleDate.getMonth();
+}
+
 
 // Takes any messy text (like "Mahlkonig E80 - Black") and strips away all spaces, dashes, 
 // and capital letters to create a perfect matchable key (mahlkonige80black).
@@ -276,8 +296,10 @@ function rForecast(){
     const prod=PRODS.find(p=>p.nom===r.nom);
     const stockVal=prod?fmt(prod.stock):'—';
     const stockCls=prod?sc(prod.stock):'';
-    const varHtml=prod&&prod.variante?'<div class="pv">'+prod.variante+'</div>':'';
-    return '<tr><td><div class="pn">'+r.nom+'</div>'+varHtml+'</td><td style="color:var(--t2);font-size:12px">'+r.fourn+'</td><td>'+bP(r.cat)+'</td><td style="text-align:right"><span class="'+stockCls+'">'+stockVal+'</span></td>'+
+    const varActuelle = prod ? prod.variante : '';
+    const cleanNom = (varActuelle && r.nom.endsWith(' - ' + varActuelle)) ? r.nom.slice(0, -(varActuelle.length + 3)) : r.nom;
+    const varHtml = varActuelle ? '<div class="pv">' + varActuelle + '</div>' : '';
+    return '<tr><td><div class="pn">'+cleanNom+'</div>'+varHtml+'</td><td style="color:var(--t2);font-size:12px">'+r.fourn+'</td><td>'+bP(r.cat)+'</td><td style="text-align:right"><span class="'+stockCls+'">'+stockVal+'</span></td>'+
       months.map(m=>{const v=r[m]||0;return v>0?'<td style="text-align:right;color:var(--gr);font-weight:500">'+fmt(v)+'</td>':'<td style="text-align:right;color:var(--t3)">—</td>';}).join('')+
       '<td style="text-align:right;font-weight:600">'+fmt(total)+'</td></tr>';
   }).join('')||'<tr><td colspan="17" style="text-align:center;padding:40px;color:var(--t3)">Aucun forecast</td></tr>';
@@ -602,7 +624,16 @@ async function loadData(){
       const qty=n(r[6]||1);
       const nouvelleDate=String(r[9]||'').trim();
       const com=nouvelleDate?fmtD(nouvelleDate):'';
-      byCmd[cmd].lignes.push({nom:nomComplet,variante:String(r[3]||''),qty,livraison:fmtD(r[7]||''),com});
+      
+      // FIX: Variante is now r[2], ID is now r[3]
+      byCmd[cmd].lignes.push({
+        nom: nomComplet,
+        variante: String(r[2]||''),
+        idVariante: String(r[3]||'').replace(/\D/g, ''), 
+        qty,
+        livraison: fmtD(r[7]||''),
+        com
+      });
       byCmd[cmd].total+=qty;
     });
     STOCKY=Object.values(byCmd).filter(c=>c.lignes.length>0).sort((a,b)=>b.cmd-a.cmd);
@@ -618,11 +649,21 @@ async function loadData(){
       const qty=n(r[6]||0);
       const nouvelleDateT=String(r[9]||'').trim();
       const comT=nouvelleDateT?fmtD(nouvelleDateT):'';
-      byCmdT[cmd].lignes.push({nom:nomComplet,titre:String(r[2]||'').trim(),variante:String(r[3]||''),sku:String(r[8]||'').trim(),qty,livraison:byCmdT[cmd].livraison,com:comT});      
+      
+      // FIX: Variante is now r[2], ID is now r[3]
+      byCmdT[cmd].lignes.push({
+        nom: nomComplet,
+        titre: nomComplet,
+        variante: String(r[2]||''),
+        idVariante: String(r[3]||'').replace(/\D/g, ''), 
+        sku: String(r[8]||'').trim(),
+        qty,
+        livraison: byCmdT[cmd].livraison,
+        com: comT
+      });      
       byCmdT[cmd].total+=qty;
     });
     TRANSFERTS=Object.values(byCmdT).filter(c=>c.lignes.length>0).sort((a,b)=>b.cmd.localeCompare(a.cmd));
-
     // Reconstruction de PO_ENVOYES 
     {
       const combinedNomToId={}, skuToId={};
@@ -863,6 +904,7 @@ function renderView(v){
   else if(v==='promos')rPromos();
   else if(v==='forecast')rForecast();
   else if(v==='dormant')rDormant();
+  else if(v==='scanback')rScanback(); // NOUVEAU ROUTAGE
 }
 
 function srt(tbl,col,el){
@@ -883,6 +925,7 @@ function srt(tbl,col,el){
   else if(tbl==='pr')rPromos();
   else if(tbl==='b')rBudget();
   else if(tbl==='d')rDormant();
+  else if(tbl==='sb')rScanback();
 }
 
 
@@ -966,8 +1009,11 @@ function rAlertes(){
   document.getElementById('rc-a').textContent=rows.length+' produit(s)';
 
   // DRAW THE TABLE: Generate the HTML for every single row and insert it into the page
-  document.getElementById('tb-a').innerHTML=rows.map(p=>`<tr>
-    <td><div class="pn">${p.nom}</div>${p.variante?`<div class="pv">${p.variante}</div>`:''}</td>
+  // DRAW THE TABLE: Generate the HTML for every single row and insert it into the page
+  document.getElementById('tb-a').innerHTML=rows.map(p=>{
+    const cleanNom = (p.variante && p.nom.endsWith(' - ' + p.variante)) ? p.nom.slice(0, -(p.variante.length + 3)) : p.nom;
+    return `<tr>
+    <td><div class="pn">${cleanNom}</div>${p.variante?`<div class="pv">${p.variante}</div>`:''}</td>
     <td style="white-space:nowrap;font-size:12px">${p.fourn||'—'}</td>
     <td>${bP(p.pareto)}</td>
     <td style="text-align:right"><span class="${sc(p.stock)}">${fmt(p.stock)}</span></td>
@@ -976,7 +1022,8 @@ function rAlertes(){
     <td style="text-align:right">${p.en_cmd>0?fmt(p.en_cmd):'—'}</td>
     <td style="text-align:right">${fmt(p.fc_m05)}</td>
     <td style="text-align:right;font-weight:500;color:${p.statut==='rupture'?'var(--re)':p.statut==='critique'?'var(--am)':'var(--gr)'}">${fmt(p.stock+p.en_cmd)}</td>
-  </tr>`).join('')||'<tr><td colspan="9" style="text-align:center;padding:40px;color:var(--t3)">Aucune alerte 🎉</td></tr>';
+  </tr>`;
+  }).join('')||'<tr><td colspan="9" style="text-align:center;padding:40px;color:var(--t3)">Aucune alerte 🎉</td></tr>';
 }
 
 // 2. STOCKS TAB
@@ -1002,8 +1049,10 @@ function rStocks(){
   rows=sortProds(rows,SORTS.s.col,SORTS.s.dir);
   document.getElementById('rc-s').textContent=rows.length+' produit(s)';
 
-  document.getElementById('tb-s').innerHTML=rows.map(p=>`<tr>
-    <td><div class="pn">${p.nom}</div>${p.variante?`<div class="pv">${p.variante}</div>`:''}</td>
+  document.getElementById('tb-s').innerHTML=rows.map(p=>{
+    const cleanNom = (p.variante && p.nom.endsWith(' - ' + p.variante)) ? p.nom.slice(0, -(p.variante.length + 3)) : p.nom;
+    return `<tr>
+    <td><div class="pn">${cleanNom}</div>${p.variante?`<div class="pv">${p.variante}</div>`:''}</td>
     <td style="white-space:nowrap;font-size:12px">${p.fourn||'—'}</td>
     <td>${bP(p.pareto)}</td>
     <td style="text-align:right"><span class="${sc(p.stock)}">${fmt(p.stock)}</span></td>
@@ -1012,7 +1061,8 @@ function rStocks(){
     <td style="text-align:right">${p.en_cmd>0?fmt(p.en_cmd):'—'}</td>
     <td style="text-align:right">${fmt(p.fc_m05)}</td>
     <td style="text-align:right;font-weight:500;color:${p.statut==='rupture'?'var(--re)':p.statut==='critique'?'var(--am)':'var(--gr)'}">${fmt(p.stock+p.en_cmd)}</td>
-  </tr>`).join('')||'<tr><td colspan="9" style="text-align:center;padding:40px;color:var(--t3)">Aucun résultat</td></tr>';
+  </tr>`;
+  }).join('')||'<tr><td colspan="9" style="text-align:center;padding:40px;color:var(--t3)">Aucun résultat</td></tr>';
 }
 
 // This function zooms in on a single supplier to evaluate their specific 
@@ -1064,27 +1114,31 @@ function rFourn(){
     
     <div class="tw"><table>
       <thead>
-        <tr>
-            <th onclick="srt('f','nom',this)">Produit</th>
-            <th onclick="srt('f','pareto',this)" class="asc">Pareto</th>
-            <th style="text-align:right" onclick="srt('f','stock',this)">Stock</th>
-            <th onclick="srt('f','statut',this)">Statut</th>
-            <th style="text-align:right" onclick="srt('f','en_cmd',this)">En commande</th>
-            <th style="text-align:right" onclick="srt('f','fc_m05',this)">Forecast M05</th>
-        </tr>
-      </thead>
-      <tbody>
-        ${sorted.map(p=>`<tr>
-            <td><div class="pn">${p.nom}</div>${p.variante?`<div class="pv">${p.variante}</div>`:''}</td>
-            <td>${bP(p.pareto)}</td>
-            <td style="text-align:right"><span class="${sc(p.stock)}">${fmt(p.stock)}</span></td>
-            <td>${bS(p.statut,p.statut_produit)}</td>
-            <td style="text-align:right">${p.en_cmd>0?fmt(p.en_cmd):'—'}</td>
-            <td style="text-align:right">${fmt(p.fc_m05)}</td>
-        </tr>`).join('')}
-      </tbody>
-    </table></div>`;
+            <tr>
+                <th onclick="srt('f','nom',this)">Produit</th>
+                <th onclick="srt('f','pareto',this)" class="asc">Pareto</th>
+                <th style="text-align:right" onclick="srt('f','stock',this)">Stock</th>
+                <th onclick="srt('f','statut',this)">Statut</th>
+                <th style="text-align:right" onclick="srt('f','en_cmd',this)">En commande</th>
+                <th style="text-align:right" onclick="srt('f','fc_m05',this)">Forecast M05</th>
+            </tr>
+          </thead>
+          <tbody>
+            ${sorted.map(p=>{
+                const cleanNom = (p.variante && p.nom.endsWith(' - ' + p.variante)) ? p.nom.slice(0, -(p.variante.length + 3)) : p.nom;
+                return `<tr>
+                <td><div class="pn">${cleanNom}</div>${p.variante?`<div class="pv">${p.variante}</div>`:''}</td>
+                <td>${bP(p.pareto)}</td>
+                <td style="text-align:right"><span class="${sc(p.stock)}">${fmt(p.stock)}</span></td>
+                <td>${bS(p.statut,p.statut_produit)}</td>
+                <td style="text-align:right">${p.en_cmd>0?fmt(p.en_cmd):'—'}</td>
+                <td style="text-align:right">${fmt(p.fc_m05)}</td>
+            </tr>`;
+            }).join('')}
+          </tbody>
+        </table></div>`;
 }
+
 
 // 3. VENTES TAB (Sales Velocity)
 function rVentes(){
@@ -1130,8 +1184,9 @@ function rVentes(){
         growHtml=`<span class="${pct>=0?'gpos':'gneg'}">${pct>=0?'+':''}${pct}%</span>`;
       }
     }
+    const cleanNom = (p.variante && p.nom.endsWith(' - ' + p.variante)) ? p.nom.slice(0, -(p.variante.length + 3)) : p.nom;
     return`<tr>
-      <td><div class="pn">${p.nom}</div>${p.variante?`<div class="pv">${p.variante}</div>`:''}</td>
+      <td><div class="pn">${cleanNom}</div>${p.variante?`<div class="pv">${p.variante}</div>`:''}</td>
       <td style="white-space:nowrap;font-size:12px">${p.fourn||'—'}</td>
       <td>${bP(p.pareto)}</td>
       ${dispWks.map(k=>`<td style="text-align:right">${p.sems[k]>0?fmt(p.sems[k]):'—'}</td>`).join('')}
@@ -1209,14 +1264,18 @@ function rReceptions(){
         <div class="rb ${openCls}" id="rb${prefix}${i}">
           <table style="width:100%">
             <thead><tr><th>Produit</th><th>Variante</th><th style="text-align:right">Qté</th></tr></thead>
-            <tbody>${c.lignes.filter(l=>!srch||l.nom.toLowerCase().includes(srch)).map(l=>`<tr>
+            <tbody>${c.lignes.filter(l=>!srch||l.nom.toLowerCase().includes(srch)).map(l=>{
+              const vStr = l.variante && l.variante !== 'Default Title' ? l.variante : '';
+              const cleanNom = (vStr && l.nom.endsWith(' - ' + vStr)) ? l.nom.slice(0, -(vStr.length + 3)) : l.nom;
+              return `<tr>
               <td>
-                ${l.nom}
+                ${cleanNom}
 ${l.com?`<div style="font-size:11px;color:var(--am);margin-top:3px">💬 ${l.com}</div>`:''}
 </td>
-              <td style="color:var(--t3);font-size:12px">${l.variante&&l.variante!=='Default Title'?l.variante:'—'}</td>
+              <td style="color:var(--t3);font-size:12px">${vStr||'—'}</td>
               <td style="text-align:right;font-weight:500">${fmt(l.qty)}</td>
-            </tr>`).join('')}</tbody>
+            </tr>`;
+            }).join('')}</tbody>
           </table>
         </div>
       </div>`;
@@ -1761,13 +1820,17 @@ function rPromos(){
       :'—';
 
     // Find the variant name from either the Master Inventory or the Promo Sheet fallback
+    let varActuelle = '';
     const varHtml = (() => {
         const p = PRODS.find(x => x.nom === r.produit || x.nb === r.produit);
-        return p && p.variante ? `<div class="pv">${p.variante}</div>` : r.variante ? `<div class="pv">${r.variante}</div>` : '';
+        varActuelle = (p && p.variante) ? p.variante : r.variante;
+        return varActuelle ? `<div class="pv">${varActuelle}</div>` : '';
     })();
+    
+    const cleanNom = (varActuelle && r.produit.endsWith(' - ' + varActuelle)) ? r.produit.slice(0, -(varActuelle.length + 3)) : r.produit;
 
     return`<tr>
-      <td><div class="pn">${r.produit}</div>${varHtml}</td>
+      <td><div class="pn">${cleanNom}</div>${varHtml}</td>
       <td style="white-space:nowrap">${r.marque}</td>
       <td>${badge}</td>
       <td style="white-space:nowrap;font-size:12px">S${String(r.sd).padStart(2,'0')}–S${String(r.sf).padStart(2,'0')}</td>
@@ -2021,12 +2084,17 @@ function rDormant() {
 
 
     // Render Table
+    // Render Table
     document.getElementById('tb-dormant').innerHTML = tableRows.map(row => {
         const p = row.product;
+        
+        // Slice off the duplicate variant from the main name
+        const cleanNom = (p.variante && p.nom.endsWith(' - ' + p.variante)) ? p.nom.slice(0, -(p.variante.length + 3)) : p.nom;
+
         return `
         <tr>
             <td>
-                <div class="pn">${p.nom}</div>
+                <div class="pn">${cleanNom}</div>
                 ${p.variante ? `<div class="pv">${p.variante}</div>` : ''}
             </td>
             <td style="font-size:12px;color:var(--t2);">${p.fourn || '—'}</td>
@@ -3106,6 +3174,152 @@ function togglePOBlock(fournisseur, idx) {
         body.style.display = 'block';
         arr.textContent = '▼';
     }
+}
+
+// ==========================================================
+// 14. SCAN-BACK APPLICATION (PARTENAIRES)
+// ==========================================================
+function rScanback() {
+    const targetFourn = document.getElementById('sb-fourn').value;
+    const targetYear = parseInt(document.getElementById('sb-year').value);
+    const targetMonth = parseInt(document.getElementById('sb-month').value); // 0-11
+    
+    let tableRows = [];
+    let totalRecuGlobal = 0;
+    let totalVenduGlobal = 0;
+
+    // --- 1. Agréger les réceptions (Stocky & Transferts) ---
+    let recuParId = {};
+
+    function aggregerReceptions(listeCommandes) {
+        listeCommandes.forEach(c => {
+            // Ignorer si le fournisseur ne correspond pas
+            if (!c.fourn || !c.fourn.toLowerCase().includes(targetFourn.toLowerCase().split(' ')[0])) return;
+            
+            // Ignorer si pas de date de livraison
+            if (!c.livraison || c.livraison === '—') return;
+            
+            try {
+                // Parse la date (Format JJ/MM/AA ou YYYY-MM-DD)
+                let d;
+                if (c.livraison.includes('/')) {
+                    const parts = c.livraison.split('/');
+                    d = new Date(parseInt(parts[2]) + 2000, parseInt(parts[1]) - 1, parseInt(parts[0]));
+                } else {
+                    d = new Date(c.livraison);
+                }
+
+                // Si la commande tombe dans le mois et l'année sélectionnés
+                if (d.getFullYear() === targetYear && d.getMonth() === targetMonth) {
+                    c.lignes.forEach(l => {
+                        if (l.idVariante) {
+                            recuParId[l.idVariante] = (recuParId[l.idVariante] || 0) + (l.qty || 0);
+                        }
+                    });
+                }
+            } catch (e) { }
+        });
+    }
+
+    aggregerReceptions(STOCKY);
+    aggregerReceptions(TRANSFERTS);
+
+    
+    // --- 2. Parcourir le catalogue pour croiser avec les Ventes ---
+    let dataRows = []; // Dictionnaire pour le tri
+
+    PRODS.forEach(p => {
+        if (!p.fourn || !p.fourn.toLowerCase().includes(targetFourn.toLowerCase().split(' ')[0])) return;
+        
+        let venduMois = 0;
+        let venduAnnee = 0; 
+        let recuMois = recuParId[p.idVariante] || 0;
+
+        // VENTES : Traduction temporelle
+        if (targetYear === 2025) {
+            venduMois = p.vn1_months[targetMonth] || 0;
+            venduAnnee = p.vn1 || 0; 
+        } 
+        else if (targetYear === 2026) {
+            venduAnnee = p.vt || 0; 
+            for (let i = 1; i <= 53; i++) {
+                let sKey = 'S' + String(i).padStart(2, '0');
+                let qtySemaine = p.sems[sKey] || 0;
+                
+                if (qtySemaine > 0) {
+                    let calcMonth = getMonthFromCompanyWeek(i, 2026);
+                    if (calcMonth === targetMonth) {
+                        venduMois += qtySemaine;
+                    }
+                }
+            }
+        }
+
+        if (venduMois <= 0 && recuMois <= 0) return;
+
+        totalRecuGlobal += recuMois;
+        totalVenduGlobal += venduMois;
+        
+        const cleanNom = (p.variante && p.nom.endsWith(' - ' + p.variante)) ? p.nom.slice(0, -(p.variante.length + 3)) : p.nom;
+
+        // Construction de l'objet pour permettre le tri mathématique
+        dataRows.push({
+            nom: cleanNom,
+            variante: p.variante || '',
+            sku: p.skuFourn || '',
+            recu: recuMois,
+            vendu: venduMois,
+            vendu_annee: venduAnnee
+        });
+    });
+
+    // 🚀 NEW: Appliquer le moteur de tri sur nos données
+    const s = SORTS.sb;
+    dataRows = sortProds(dataRows, s.col, s.dir);
+
+    // Mapper les objets triés en HTML
+    tableRows = dataRows.map(row => {
+        return `
+        <tr>
+            <td>
+                <div class="pn">${row.nom}</div>
+                ${row.variante ? `<div class="pv">${row.variante}</div>` : ''}
+            </td>
+            <td style="font-size:12px;color:var(--t3);">${row.sku || '—'}</td>
+            <td style="text-align:right; font-weight:${row.recu > 0 ? '600' : '400'}; color:${row.recu > 0 ? 'var(--br)' : 'var(--t3)'};">${fmt(row.recu)}</td>
+            <td style="text-align:right; font-weight:600;">${fmt(row.vendu)}</td>
+            <td style="text-align:right; font-size:12px; color:var(--t2);">${fmt(row.vendu_annee)}</td>
+            <td style="text-align:center;">
+                <input type="number" min="0" placeholder="0" style="width: 70px; padding: 4px; border: 1px solid var(--b2); border-radius: 4px; font-size: 12px; text-align: center;">
+            </td>
+            <td style="text-align:center;">
+                <span style="font-size:11px; padding:3px 6px; border-radius:4px; background:var(--amb); color:var(--am);">À traiter</span>
+            </td>
+        </tr>`;
+    });
+
+    // --- 3. Injecter les KPIs ---
+    document.getElementById('mg-sb').innerHTML = `
+        <div class="mc">
+          <div class="mcl">Total Reçu (Mois)</div>
+          <div class="mcv ${totalRecuGlobal > 0 ? 'b' : ''}">${fmt(totalRecuGlobal)}</div>
+          <div class="mcs">Entrées d'inventaire</div>
+        </div>
+        <div class="mc">
+          <div class="mcl">Total Vendu (Mois)</div>
+          <div class="mcv">${fmt(totalVenduGlobal)}</div>
+          <div class="mcs">Sorties Shopify</div>
+        </div>
+        <div class="mc">
+          <div class="mcl">Total Déclaré</div>
+          <div class="mcv g">0</div>
+          <div class="mcs">Soumissions Scan-Back</div>
+        </div>
+    `;
+
+    document.getElementById('rc-sb').textContent = tableRows.length + ' références actives';
+    // NOUVEAU: Le colspan est passé de 6 à 7 pour correspondre à la nouvelle colonne
+    document.getElementById('tb-sb').innerHTML = tableRows.join('') || `<tr><td colspan="7" style="text-align:center;padding:40px;color:var(--t3)">Aucune donnée pour ce mois</td></tr>`;
 }
 
 // IGNITION: Starts the entire process when the file is loaded

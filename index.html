@@ -49,6 +49,12 @@
     <div class="ni" onclick="nav('promos',this)">
       <div class="nil"><span>🏷</span>Promos</div>
       <div class="bdg" id="nb-p"></div></div>
+
+      <!-- NOUVEAU : SECTION SCAN-BACKS -->
+      <div class="sbl">Partenaires</div>
+      <div class="ni" onclick="nav('scanback',this)"><div class="nil"><span>🤝</span>Scan-Backs</div></div>
+      <!-- FIN NOUVEAU -->
+
     <div class="ni" onclick="nav('dormant',this)"><div class="nil"><span>💤</span>Stock Dormant</div></div>
   </div>
   <div class="con">
@@ -275,6 +281,50 @@
         </table>
       </div>
     </div>
+    <!-- VUE SCAN-BACK -->
+    <div id="v-scanback" class="view">
+      <div class="sh"><span class="st">Déclarations Scan-Back (Mensuel)</span><span class="rc" id="rc-sb"></span></div>
+      
+      <div class="fl">
+        <select class="fsel" id="sb-fourn" onchange="rScanback()" style="min-width: 180px;">
+          <option value="Delonghi">De'Longhi</option>
+          <option value="Philips">Versuni (Philips)</option>
+        </select>
+        <select class="fsel" id="sb-year" onchange="rScanback()">
+          <option value="2026">2026 (Actuel)</option>
+          <option value="2025">2025 (Historique)</option>
+        </select>
+        <select class="fsel" id="sb-month" onchange="rScanback()">
+          <option value="0">Janvier</option><option value="1">Février</option><option value="2">Mars</option>
+          <option value="3">Avril</option><option value="4">Mai</option><option value="5">Juin</option>
+          <option value="6">Juillet</option><option value="7">Août</option><option value="8">Septembre</option>
+          <option value="9">Octobre</option><option value="10">Novembre</option><option value="11">Décembre</option>
+        </select>
+        <button class="fb on" onclick="rScanback()">↻ Actualiser</button>
+      </div>
+
+      <div class="mg" id="mg-sb">
+        <!-- Les KPI Boxes seront injectées ici par Javascript -->
+      </div>
+
+      <div class="tw" style="overflow-x:auto">
+        <table>
+          <thead>
+            <tr>
+              <th onclick="srt('sb','nom',this)">Produit & Variante</th>
+              <th onclick="srt('sb','sku',this)">SKU</th>
+              <th style="text-align:right" onclick="srt('sb','recu',this)">Reçu (Entrepôt)</th>
+              <th style="text-align:right" onclick="srt('sb','vendu',this)" class="desc">Vendu (Mois)</th>
+              <th style="text-align:right" onclick="srt('sb','vendu_annee',this)">Vendu (Année)</th>
+              <th style="text-align:center">Déclaré (Scan-Back)</th>
+              <th style="text-align:center">Statut</th>
+            </tr>
+          </thead>
+          <tbody id="tb-sb"></tbody>
+        </table>
+      </div>
+    </div>
+    <!-- FIN VUE SCAN-BACK -->
   </div>
 </div>
 <div id="modal-cmd-overlay" style="display:none;position:fixed;inset:0;background:rgba(0,0,0,.4);z-index:500;align-items:center;justify-content:center" onclick="if(event.target===this)fermerCommandeManuelle()">
