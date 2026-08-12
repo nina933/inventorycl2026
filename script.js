@@ -110,7 +110,8 @@ let SORTS={
   pr:{col:'nom',dir:1},
   b:{col:'sn',dir:1},
   d:{col:'capital',dir:-1},
-  sb:{col:'vendu',dir:-1}
+  sb:{col:'vendu',dir:-1},
+  po:{col:'nom',dir:1} // NOUVEAU: Tri pour le tableau de création PO
 };
 // Temporary buckets to hold the specific, filtered results for the Alertes and Stocks tables.
 let PRODS_A=[],PRODS_S=[];
@@ -121,9 +122,8 @@ let VENDOR_MAP={};
 // A sticky note that remembers which team member's button is currently clicked at the top of the screen.
 let EQUIPE_FILTER='';
 
-
-
-
+// NOUVEAU: Mémoire pour cacher les doublons "Déjà dans PO"
+let PO_HIDDEN_DUPLICATES = {};
 
 
 
@@ -937,6 +937,7 @@ function srt(tbl,col,el){
   else if(tbl==='b')rBudget();
   else if(tbl==='d')rDormant();
   else if(tbl==='sb')rScanback();
+  else if(tbl==='po')rPO(); // NOUVEAU ROUTAGE
 }
 
 
@@ -967,6 +968,24 @@ function rAlertes(){
 
   // FILTERING THE DATA: Iterate through every product and run it through a gauntlet of tests.
   let rows=PRODS.filter(p=>{
+
+    // NOUVEAU: Exclusion stricte des bundles et produits virtuels
+    const lowerName = p.nom.toLowerCase();
+    const isExcluded = 
+        lowerName.includes("3 months of free coffee") ||
+        lowerName.includes("decaf -swiss process") ||
+        lowerName.includes("new wave") ||
+        lowerName.includes("hoodies") ||
+        lowerName.includes("gift card") ||
+        lowerName.includes("bundle") ||
+        lowerName.includes("demo") ||
+        lowerName.includes("open box") ||
+        lowerName.includes("return") ||
+        lowerName.includes("refurbished") ||
+        lowerName.includes("à vendre en boutique");
+
+    if (isExcluded) return false;
+
     const isR=p.statut==='rupture',isC=p.statut==='critique';
 
     // Strict requirement: Only show items that are Out of Stock or Critical
@@ -1312,14 +1331,95 @@ function toggleRec(id,aid){
   if(a)a.textContent=open?'▲':'▼';
 }
 
+// ==========================================================
+// LOGIQUE DE CONFIRMATION ET MASQUAGE PO
+// ==========================================================
+function cacherDuplicatePO(fourn, idVariante) {
+    if(!PO_HIDDEN_DUPLICATES[fourn]) PO_HIDDEN_DUPLICATES[fourn] = [];
+    if(!PO_HIDDEN_DUPLICATES[fourn].includes(idVariante)){
+        PO_HIDDEN_DUPLICATES[fourn].push(idVariante);
+    }
+    rPO();
+}
+
+let CONFIRM_PO_CTX = null;
+
+function ouvrirConfirmPO(idx, semaines) {
+    const sems = Array.isArray(semaines) ? semaines : [semaines];
+    const grp = window.PO_GROUPES && window.PO_GROUPES[idx];
+    if(!grp) return;
+    const [fourn, prods] = grp;
+
+    const lignes = prods.map(r => {
+        const p = PRODS.find(x => x.nom === r.nom);
+        return {
+            idVariante: r.idVariante || (p ? p.idVariante : ''),
+            quantite: sems.reduce((s, sw) => s + (r.sems[sw] || 0), 0),
+            nom: r.nom,
+            variante: p && p.variante ? p.variante : '',
+            sku: p && p.skuFourn ? p.skuFourn : '',
+            prix: r.prix || 0
+        };
+    }).filter(l => l.idVariante && l.quantite > 0);
+
+    if(!lignes.length){
+        alert('Veuillez ajouter des quantités valides avant de créer la commande.');
+        return;
+    }
+
+    const dejaEnvoyes = PO_ENVOYES[fourn] || [];
+    const idVEnvoyes = new Set(dejaEnvoyes.flatMap(e => e.lignes.map(l => l.idVariante)));
+    const doubles = lignes.filter(l => idVEnvoyes.has(l.idVariante));
+
+    let alertHtml = '';
+    if (doubles.length > 0) {
+        alertHtml = `<div style="background:var(--reb);color:var(--re);padding:10px;border-radius:6px;margin-bottom:14px;font-size:12px;font-weight:600;line-height:1.4;">
+        ⚠️ Attention : Certains produits sélectionnés existent déjà dans une commande en cours pour ce fournisseur. Confirmez-vous cette double commande ?
+        </div>`;
+    }
+
+    let totalCost = 0;
+    const lignesHtml = lignes.map(l => {
+        const lineTotal = l.quantite * l.prix;
+        totalCost += lineTotal;
+        const cleanNom = (l.variante && l.nom.endsWith(' - ' + l.variante)) ? l.nom.slice(0, -(l.variante.length + 3)) : l.nom;
+        return `<div style="display:flex; justify-content:space-between; padding:8px 0; border-bottom:1px solid var(--b1); font-size:12px;">
+            <div style="flex:1; padding-right: 15px;">
+                <div style="font-weight:500;">${cleanNom}</div>
+                <div style="color:var(--t3); font-size:11px;">${l.variante || ''}</div>
+            </div>
+            <div style="text-align:right;">
+                <div style="font-weight:600;">${fmt(l.quantite)} unités</div>
+                <div style="color:var(--t2); font-size:11px;">${fmtM(lineTotal)}</div>
+            </div>
+        </div>`;
+    }).join('');
+
+    document.getElementById('cpo-title').textContent = `Confirmer la commande — ${fourn}`;
+    document.getElementById('cpo-lignes').innerHTML = alertHtml + lignesHtml;
+    document.getElementById('cpo-total').textContent = `Total : ${fmtM(totalCost)}`;
+
+    CONFIRM_PO_CTX = { idx, semaines };
+    document.getElementById('modal-confirm-po').style.display = 'flex';
+}
+
+function fermerConfirmPO() {
+    document.getElementById('modal-confirm-po').style.display = 'none';
+    CONFIRM_PO_CTX = null;
+}
+
+function validerConfirmPO() {
+    if (!CONFIRM_PO_CTX) return;
+    const { idx, semaines } = CONFIRM_PO_CTX;
+    fermerConfirmPO();
+    envoyerCommandeFournisseur(idx, semaines); // Déclenche le vrai payload
+}
+
 // -----------------------------------------------------------------
 // 7. PURCHASE ORDERS BUILDER (rPO)
 // -----------------------------------------------------------------
 // This tab calculates exactly what needs to be ordered *this week* // based on the automated forecast, generating a ready-to-order list.
 
-// -----------------------------------------------------------------
-// 7. PURCHASE ORDERS BUILDER (rPO)
-// -----------------------------------------------------------------
 function rPO(){
   const W=cw();
   let semaines=gC('swpo').map(Number).filter(n=>!isNaN(n)).sort((a,b)=>a-b);
@@ -1537,11 +1637,16 @@ function rPO(){
     if(fourn&&f2!==fourn)return;
     const idVDejaDansByF=new Set((byF[f2]||[]).map(r=>r.idVariante||(PRODS.find(x=>x.nom===r.nom)?.idVariante||'')));
     const idVCommittes=new Set((PO_ENVOYES[f2]||[]).flatMap(e=>e.lignes.map(l=>l.idVariante)));
+    
     idVCommittes.forEach(idV=>{
       // Prevent empty IDs (shipping fees/ghost items) from being resurrected
       if(!idV) return;
       
       if(idVDejaDansByF.has(idV))return;
+
+      // NOUVEAU: Si l'utilisateur l'a masqué, on ignore l'injection.
+      if(PO_HIDDEN_DUPLICATES[f2] && PO_HIDDEN_DUPLICATES[f2].includes(idV)) return;
+
       const p=PRODS.find(x=>x.idVariante===idV);
       if(!p)return;
       if(!byF[f2])byF[f2]=[];
@@ -1592,6 +1697,16 @@ function rPO(){
         `;
       }
 
+      // NOUVEAU : Préparation des variables pour le tri
+      prodsNonCommandes.forEach(r => {
+          const p = PRODS.find(x => x.nom === r.nom);
+          r._stock = p ? p.stock : 0;
+          r._qtySel = qtySel(r);
+          r._montant = r._qtySel * (r.prix || 0);
+      });
+      // Exécution du tri
+      const sortedProds = sortProds([...prodsNonCommandes], SORTS.po.col, SORTS.po.dir);
+
       html+=`<div style="margin-bottom:16px; border:1px solid var(--b2); border-radius:8px; padding:12px; background:var(--w);">
         
         <!-- HEADER CLIQUABLE -->
@@ -1606,7 +1721,7 @@ function rPO(){
           <div style="display:flex; align-items:center; gap:8px;">
             <input type="date" id="date-po-${idx}" style="padding:5px 8px; border:1px solid var(--b2); border-radius:6px; font-size:12px; font-family:'Inter', sans-serif" title="Date de livraison (optionnel)" onclick="event.stopPropagation()">
             ${dropdownHtml}
-            ${aEnvoyer > 0 ? `<button class="fb" id="btn-po-${idx}" onclick="envoyerCommandeFournisseur(${idx},[${semaines.join(',')}])">Créer la commande</button>` : ''}
+            ${aEnvoyer > 0 ? `<button class="fb" id="btn-po-${idx}" onclick="ouvrirConfirmPO(${idx},[${semaines.join(',')}])">Créer la commande</button>` : ''}
           </div>
         </div>
         
@@ -1614,11 +1729,18 @@ function rPO(){
         <div id="po-body-${idx}" style="display:${displayStyle}; margin-top:12px; padding-top:12px; border-top:1px solid var(--b1);">
           ${aEnvoyer > 0 ? `
           <div class="tw"><table>
-            <thead><tr><th>Produit</th><th>Cat.</th><th style="text-align:right">Stock actuel</th><th>Délai</th>
-            ${wks.map(i=>`<th style="text-align:center">S${String(i).padStart(2,'0')}${semaines.includes(i)?' ✎':''}</th>`).join('')}
-            <th style="text-align:right">Total cmd</th><th style="text-align:center">Sem. couvertes</th><th style="text-align:right">Coût unit.</th><th style="text-align:right">Montant</th>
+            <thead><tr>
+              <th onclick="srt('po','nom',this)">Produit</th>
+              <th onclick="srt('po','cat',this)">Cat.</th>
+              <th style="text-align:right" onclick="srt('po','_stock',this)">Stock actuel</th>
+              <th onclick="srt('po','delai',this)">Délai</th>
+              ${wks.map(i=>`<th style="text-align:center">S${String(i).padStart(2,'0')}${semaines.includes(i)?' ✎':''}</th>`).join('')}
+              <th style="text-align:right" onclick="srt('po','_qtySel',this)">Total cmd</th>
+              <th style="text-align:center">Sem. couvertes</th>
+              <th style="text-align:right" onclick="srt('po','prix',this)">Coût unit.</th>
+              <th style="text-align:right" onclick="srt('po','_montant',this)">Montant</th>
             </tr></thead>
-            <tbody>${prodsNonCommandes.map(r=>{
+            <tbody>${sortedProds.map(r=>{
               const fournSafe=(r.fourn||'').replace(/'/g,"\\\\'");
               const idSafe=(r.idVariante||'').replace(/'/g,"\\\\'");
               const nomSafe=r.nom.replace(/'/g,"\\\\'");
@@ -1633,7 +1755,7 @@ function rPO(){
                 <div style="margin-top: 3px; display: block;">
                   ${(()=>{
                       const existingPOs = (PO_ENVOYES[f] || []).filter(e => e.lignes.some(l => l.idVariante === idSafe)).map(e => e.poNumber);
-                      return existingPOs.length > 0 ? `<div style="color:var(--am); font-size:10px; font-weight:bold; margin-bottom:4px;">⚠️ Déjà dans PO: ${existingPOs.join(', ')}</div>` : '';
+                      return existingPOs.length > 0 ? `<div style="color:var(--am); font-size:10px; font-weight:bold; margin-bottom:4px;">⚠️ Déjà dans PO: ${existingPOs.join(', ')} <a href="#" onclick="cacherDuplicatePO('${fournSafe}','${idSafe}');return false;" style="color:var(--re);text-decoration:underline;margin-left:4px;font-weight:normal;">retirer</a></div>` : '';
                   })()}
                   ${r._manuel?`<span style="font-size:10px;color:var(--am);font-weight:600">(ajout manuel) <a href="#" onclick="retirerExtra('${fournSafe}','${idSafe}');return false;" style="color:var(--re);text-decoration:underline">retirer</a></span>`:''}
                   ${r._custom?`<span style="font-size:10px;color:var(--am);font-weight:600">(produit personnalisé) <a href="#" onclick="retirerCustom('${fournSafe}','${r.customId}');return false;" style="color:var(--re);text-decoration:underline">retirer</a></span>`:''}
@@ -1662,9 +1784,10 @@ function rPO(){
                           validationBadge = `<div style="color:var(--re); font-size:10px; font-weight:bold; margin-top:4px;">⚠️ Invalide</div>`;
                       }
                   }
+                  
                   const stepVal = moq > 1 ? moq : '0.01'; // Permet les décimales si pas de MOQ
                   return `<td style="text-align:center; vertical-align:top; padding-top:8px;">
-                      <input type="number" min="0" step="${moq}" value="${val}" style="width:50px;padding:2px 4px;${style};border-radius:4px;font-size:12px;text-align:center" onchange="majQuantitePO('${fournSafe}','${idSafe}','${nomSafe}',${i},this.value,'${tipo}','${r.customId||''}')">
+                      <input type="number" min="0" step="${stepVal}" value="${val}" style="width:50px;padding:2px 4px;${style};border-radius:4px;font-size:12px;text-align:center" onchange="majQuantitePO('${fournSafe}','${idSafe}','${nomSafe}',${i},this.value,'${tipo}','${r.customId||''}')">
                       <div style="display:flex; flex-direction:column; align-items:center;">
                           ${moqBadge}
                           ${validationBadge}

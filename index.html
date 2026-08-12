@@ -327,6 +327,27 @@
     <!-- FIN VUE SCAN-BACK -->
   </div>
 </div>
+
+<!-- NOUVEAU: MODAL DE CONFIRMATION DE COMMANDE -->
+<div id="modal-confirm-po" style="display:none;position:fixed;inset:0;background:rgba(0,0,0,.4);z-index:600;align-items:center;justify-content:center" onclick="if(event.target===this)fermerConfirmPO()">
+  <div style="background:var(--w);border-radius:12px;width:600px;max-width:92vw;max-height:85vh;overflow-y:auto;padding:22px">
+    <div style="display:flex;align-items:center;margin-bottom:16px">
+      <span style="font-size:14px;font-weight:600" id="cpo-title">Confirmer la commande</span>
+      <button class="rbtn" onclick="fermerConfirmPO()" style="margin-left:auto">✕</button>
+    </div>
+    
+    <div id="cpo-lignes" style="margin-bottom:14px; max-height: 400px; overflow-y: auto; padding-right: 8px;"></div>
+    
+    <div id="cpo-total" style="text-align:right;font-size:14px;font-weight:700;color:var(--br);margin-bottom:16px; padding-top: 10px; border-top: 1px solid var(--b2);"></div>
+    
+    <div style="display:flex;gap:8px;justify-content:flex-end">
+      <button class="rbtn" onclick="fermerConfirmPO()">Annuler</button>
+      <button class="fb on" id="cpo-submit" onclick="validerConfirmPO()">Envoyer à Shopify</button>
+    </div>
+  </div>
+</div>
+<!-- FIN NOUVEAU MODAL -->
+
 <div id="modal-cmd-overlay" style="display:none;position:fixed;inset:0;background:rgba(0,0,0,.4);z-index:500;align-items:center;justify-content:center" onclick="if(event.target===this)fermerCommandeManuelle()">
   <div style="background:var(--w);border-radius:12px;width:600px;max-width:92vw;max-height:85vh;overflow-y:auto;padding:22px">
     <div style="display:flex;align-items:center;margin-bottom:16px">
