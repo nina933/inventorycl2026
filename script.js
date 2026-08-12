@@ -982,7 +982,9 @@ function rAlertes(){
         lowerName.includes("open box") ||
         lowerName.includes("return") ||
         lowerName.includes("refurbished") ||
-        lowerName.includes("à vendre en boutique");
+        lowerName.includes("à vendre en boutique")
+        lowerName.includes("tasting pack") ||       // NOUVEAU : Exclut les packs dégustation
+        lowerName.includes("3 x 1kg");
 
     if (isExcluded) return false;
 
@@ -1457,7 +1459,9 @@ function rPO(){
         lowerName.includes("open box") ||
         lowerName.includes("return") ||
         lowerName.includes("refurbished") ||
-        lowerName.includes("à vendre en boutique");
+        lowerName.includes("à vendre en boutique")
+        lowerName.includes("tasting pack") ||       // NOUVEAU : Exclut les packs dégustation
+        lowerName.includes("3 x 1kg");
 
     if (isExcluded) return false;
     
@@ -1569,7 +1573,9 @@ function rPO(){
         lowerName.includes("open box") ||
         lowerName.includes("return") ||
         lowerName.includes("refurbished") ||
-        lowerName.includes("à vendre en boutique");
+        lowerName.includes("à vendre en boutique")
+        lowerName.includes("tasting pack") ||       // NOUVEAU : Exclut les packs dégustation
+        lowerName.includes("3 x 1kg");
 
     if (isExcluded) return false;
 
@@ -2120,7 +2126,9 @@ function rDormant() {
             lowerName.includes("open box") ||
             lowerName.includes("return") ||
             lowerName.includes("refurbished") ||
-            lowerName.includes("à vendre en boutique");
+            lowerName.includes("à vendre en boutique")
+            lowerName.includes("tasting pack") ||       // NOUVEAU : Exclut les packs dégustation
+            lowerName.includes("3 x 1kg");
 
         // If the product matches any of the names above, skip it immediately
         if (isExcluded) 
