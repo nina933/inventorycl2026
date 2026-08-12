@@ -55,6 +55,10 @@
       <div class="ni" onclick="nav('scanback',this)"><div class="nil"><span>🤝</span>Scan-Backs</div></div>
       <!-- FIN NOUVEAU -->
 
+      <!-- NOUVEAU : SECTION QUALITÉ DE DONNÉE -->
+      <div class="sbl">Maintenance</div>
+      <div class="ni" onclick="nav('mapping',this)"><div class="nil"><span>🛠️</span>Qualité de Donnée</div></div>
+
     <div class="ni" onclick="nav('dormant',this)"><div class="nil"><span>💤</span>Stock Dormant</div></div>
   </div>
   <div class="con">
@@ -325,6 +329,40 @@
       </div>
     </div>
     <!-- FIN VUE SCAN-BACK -->
+
+    <!-- VUE QUALITÉ DE DONNÉE -->
+    <div id="v-mapping" class="view">
+      <div class="sh"><span class="st">Mapping des IDs (Correction Ventes N-1)</span><span class="rc" id="rc-map"></span></div>
+      
+      <div style="background:var(--w);border:1px solid var(--b1);border-radius:10px;padding:16px;margin-bottom:16px;">
+        <div style="font-size:12px;font-weight:600;margin-bottom:10px;color:var(--t2);">Lier un ancien ID orphelin à un nouvel ID Shopify</div>
+        <div style="display:flex;gap:10px;align-items:center;flex-wrap:wrap;">
+          <input type="text" id="map-old" class="fin" placeholder="Ancien ID (ex: 41234...)" style="flex:1;min-width:140px;">
+          <span style="color:var(--t3);font-weight:bold;">→</span>
+          <input type="text" id="map-new" class="fin" placeholder="Nouvel ID (ex: 49876...)" style="flex:1;min-width:140px;">
+          <input type="text" id="map-nom" class="fin" placeholder="Nom du produit" style="flex:1.5;min-width:160px;">
+          <input type="text" id="map-var" class="fin" placeholder="Variante (optionnel)" style="flex:1;min-width:120px;">
+          <button class="fb on" id="btn-save-map" onclick="enregistrerMapping()" style="padding:6px 16px;">Lier les IDs</button>
+        </div>
+      </div>
+
+      <div class="tw" style="overflow-x:auto">
+        <table>
+          <thead>
+            <tr>
+              <th onclick="srt('map','nom',this)">Produit</th>
+              <th onclick="srt('map','variante',this)">Variante</th>
+              <th onclick="srt('map','ancien',this)">Ancien ID (Orphelin)</th>
+              <th onclick="srt('map','nouveau',this)">Nouvel ID (Actif)</th>
+            </tr>
+          </thead>
+          <tbody id="tb-mapping"></tbody>
+        </table>
+      </div>
+    </div>
+    <!-- FIN VUE QUALITÉ DE DONNÉE -->
+
+    
   </div>
 </div>
 

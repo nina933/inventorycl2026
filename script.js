@@ -57,7 +57,7 @@ window.addEventListener('unhandledrejection', function(event) {
 // For example, PRODS will hold all products, RECEPTIONS will hold incoming orders.
 // e.g., PRIX_MAP looks up a product's name and instantly gives you its unit cost.
 // Removed ETAT, added TRANSFERTS, COUT_MAP, PRIX_ID_MAP, and ABC_ID_MAP (July 16th)
-let PRODS=[],STOCKY=[],TRANSFERTS=[],RECEPTIONS=[],PREVISION=[],PROMOS=[],BUDGET=[],PRIX_MAP={},PRIX_ID_MAP={},COUT_MAP={},DELAIS_MAP={},FORECAST=[];
+let PRODS=[],STOCKY=[],TRANSFERTS=[],RECEPTIONS=[],PREVISION=[],PROMOS=[],BUDGET=[],PRIX_MAP={},PRIX_ID_MAP={},COUT_MAP={},DELAIS_MAP={},FORECAST=[],MAPPING_IDS=[];
 // Phonebook specifically to store custom notes/comments about specific products.
 let COMMENTS_MAP={};
 let MOQ_MAP={};
@@ -111,7 +111,8 @@ let SORTS={
   b:{col:'sn',dir:1},
   d:{col:'capital',dir:-1},
   sb:{col:'vendu',dir:-1},
-  po:{col:'nom',dir:1} // NOUVEAU: Tri pour le tableau de création PO
+  po:{col:'nom',dir:1}, // NOUVEAU: Tri pour le tableau de création PO
+  map:{col:'nom',dir:1} // NOUVEAU: Tri pour la table de mapping
 };
 // Temporary buckets to hold the specific, filtered results for the Alertes and Stocks tables.
 let PRODS_A=[],PRODS_S=[];
@@ -488,6 +489,32 @@ async function loadData(){
       if(produit&&produit!==titre)VN1_MAP[produit]=(VN1_MAP[produit]||0)+total;
       if(titre)VN1_NORM[normKey(titre)]=(VN1_NORM[normKey(titre)]||0)+total;
       if(produit)VN1_NORM[normKey(produit)]=(VN1_NORM[normKey(produit)]||0)+total;
+    });
+
+    // ==========================================
+    // 🚀 NOUVEAU : INJECTION DU MAPPING DES IDs
+    // ==========================================
+    MAPPING_IDS = [];
+    (raw['Mapping IDs'] || []).slice(1).forEach(r => {
+        const ancien = String(r[0] || '').replace(/\D/g, '');
+        const nouveau = String(r[1] || '').replace(/\D/g, '');
+        const nom = String(r[2] || '').trim();
+        const variante = String(r[3] || '').trim();
+        
+        if (ancien && nouveau) {
+            MAPPING_IDS.push({ ancien, nouveau, nom, variante });
+            
+            // Transfert Magique des Ventes N-1 de l'ancien ID vers le nouveau !
+            if (VN1_ID_MAP[ancien]) {
+                VN1_ID_MAP[nouveau] = (VN1_ID_MAP[nouveau] || 0) + VN1_ID_MAP[ancien];
+            }
+            if (VN1_MONTHLY_MAP[ancien]) {
+                if (!VN1_MONTHLY_MAP[nouveau]) VN1_MONTHLY_MAP[nouveau] = [0,0,0,0,0,0,0,0,0,0,0,0];
+                for (let i = 0; i < 12; i++) {
+                    VN1_MONTHLY_MAP[nouveau][i] += VN1_MONTHLY_MAP[ancien][i];
+                }
+            }
+        }
     });
 
     // =================================================================
@@ -916,6 +943,8 @@ function renderView(v){
   else if(v==='forecast')rForecast();
   else if(v==='dormant')rDormant();
   else if(v==='scanback')rScanback(); // NOUVEAU ROUTAGE
+  else if(v==='mapping')rMapping(); // NOUVEAU
+  
 }
 
 function srt(tbl,col,el){
@@ -938,6 +967,7 @@ function srt(tbl,col,el){
   else if(tbl==='d')rDormant();
   else if(tbl==='sb')rScanback();
   else if(tbl==='po')rPO(); // NOUVEAU ROUTAGE
+  else if(tbl==='map')rMapping(); // NOUVEAU
 }
 
 
@@ -3462,6 +3492,78 @@ function rScanback() {
     document.getElementById('rc-sb').textContent = tableRows.length + ' références actives';
     // NOUVEAU: Le colspan est passé de 6 à 7 pour correspondre à la nouvelle colonne
     document.getElementById('tb-sb').innerHTML = tableRows.join('') || `<tr><td colspan="7" style="text-align:center;padding:40px;color:var(--t3)">Aucune donnée pour ce mois</td></tr>`;
+}
+
+// ==========================================================
+// 15. QUALITÉ DE DONNÉE (MAPPING DES IDs ORPHELINS)
+// ==========================================================
+
+function rMapping() {
+    // Trier la mémoire avec le moteur global
+    const rows = sortProds([...MAPPING_IDS], SORTS.map.col, SORTS.map.dir);
+    
+    document.getElementById('rc-map').textContent = rows.length + ' lien(s)';
+    
+    document.getElementById('tb-mapping').innerHTML = rows.map(r => `
+        <tr>
+            <td class="pn">${r.nom}</td>
+            <td style="color:var(--t2);font-size:12px">${r.variante || '—'}</td>
+            <td style="font-family:monospace;color:var(--re);font-weight:600;">${r.ancien}</td>
+            <td style="font-family:monospace;color:var(--gr);font-weight:600;">${r.nouveau}</td>
+        </tr>
+    `).join('') || `<tr><td colspan="4" style="text-align:center;padding:40px;color:var(--t3)">Aucun mapping enregistré</td></tr>`;
+}
+
+async function enregistrerMapping() {
+    const ancien = document.getElementById('map-old').value.replace(/\D/g, '');
+    const nouveau = document.getElementById('map-new').value.replace(/\D/g, '');
+    const nom = document.getElementById('map-nom').value.trim();
+    const variante = document.getElementById('map-var').value.trim();
+    
+    if(!ancien || !nouveau || !nom) {
+        alert("⚠️ Veuillez remplir l'Ancien ID, le Nouvel ID et le Nom du produit.");
+        return;
+    }
+    
+    const btn = document.getElementById('btn-save-map');
+    btn.disabled = true;
+    btn.textContent = 'Enregistrement...';
+    
+    try {
+        const payload = {
+            action: 'mapping',
+            ancien: ancien,
+            nouveau: nouveau,
+            nom: nom,
+            variante: variante
+        };
+        
+        const resp = await fetch(URL_AS, {
+            method: 'POST',
+            headers: { 'Content-Type': 'text/plain;charset=utf-8' },
+            body: JSON.stringify(payload)
+        });
+        
+        const data = await resp.json();
+        
+        if(data.success) {
+            alert("✅ Mapping enregistré avec succès ! L'historique des ventes est désormais lié.");
+            document.getElementById('map-old').value = '';
+            document.getElementById('map-new').value = '';
+            document.getElementById('map-nom').value = '';
+            document.getElementById('map-var').value = '';
+            
+            // Recharger le dashboard pour que le nouveau mapping soit injecté dans les VN1
+            loadData();
+        } else {
+            alert("Erreur serveur : " + data.error);
+        }
+    } catch (err) {
+        alert("Erreur réseau : " + err.message);
+    } finally {
+        btn.disabled = false;
+        btn.textContent = 'Lier les IDs';
+    }
 }
 
 // IGNITION: Starts the entire process when the file is loaded
