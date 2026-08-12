@@ -214,9 +214,13 @@ function n(v){
   return isNaN(x)?0:x;
 }
 
-  // Takes a raw number (like 1234.56) and rounds it to a clean, formatted whole number (like 1 235).
+// Takes a raw number and rounds it, BUT allows decimals if they are needed for bulk orders
 function fmt(v){
-  return Math.round(n(v)).toLocaleString('fr-CA');
+  const num = n(v);
+  // S'il y a une décimale, on l'affiche. Sinon, on garde un nombre entier propre.
+  return (num % 1 !== 0) 
+    ? num.toLocaleString('fr-CA', {minimumFractionDigits:1, maximumFractionDigits:2}) 
+    : Math.round(num).toLocaleString('fr-CA');
 }
 
 // Takes a raw number and turns it into Canadian currency formatting (e.g., 1 235 $).
@@ -650,6 +654,8 @@ async function loadData(){
       const nouvelleDateT=String(r[9]||'').trim();
       const comT=nouvelleDateT?fmtD(nouvelleDateT):'';
       
+      const statusLigne = String(r[9]||'').trim(); // NOUVEAU: Extraction du statut (Colonne J)
+      
       // FIX: Variante is now r[2], ID is now r[3]
       byCmdT[cmd].lignes.push({
         nom: nomComplet,
@@ -659,11 +665,13 @@ async function loadData(){
         sku: String(r[8]||'').trim(),
         qty,
         livraison: byCmdT[cmd].livraison,
-        com: comT
+        com: comT,
+        status: statusLigne // Injection du statut dans la mémoire
       });      
       byCmdT[cmd].total+=qty;
     });
     TRANSFERTS=Object.values(byCmdT).filter(c=>c.lignes.length>0).sort((a,b)=>b.cmd.localeCompare(a.cmd));
+    
     // Reconstruction de PO_ENVOYES 
     {
       const combinedNomToId={}, skuToId={};
@@ -675,10 +683,13 @@ async function loadData(){
       const poEnvoyesReconstruit={};
       TRANSFERTS.forEach(c=>{
         if(!c.fourn)return;
-        const lignesResolues=c.lignes.filter(l=>l.qty>0).map(l=>{
+        
+        // NOUVEAU FILTRE : On supprime les alertes pour les lignes "Reçu" ou "Annulé" !
+        const lignesResolues=c.lignes.filter(l => l.qty > 0 && l.status !== "Reçu" && l.status !== "Annulé").map(l=>{
           const idV = combinedNomToId[normKey(l.nom)] || skuToId[normKey(l.sku)] || '';
           return {idVariante:idV, quantite:l.qty, nom:l.titre||l.nom, variante:l.variante||'', sku:l.sku||''};
         });
+        
         if(!lignesResolues.length)return;
         if(!poEnvoyesReconstruit[c.fourn])poEnvoyesReconstruit[c.fourn]=[];
         poEnvoyesReconstruit[c.fourn].push({poNumber:c.cmd,lignes:lignesResolues,date:''});
@@ -1651,7 +1662,7 @@ function rPO(){
                           validationBadge = `<div style="color:var(--re); font-size:10px; font-weight:bold; margin-top:4px;">⚠️ Invalide</div>`;
                       }
                   }
-                  
+                  const stepVal = moq > 1 ? moq : '0.01'; // Permet les décimales si pas de MOQ
                   return `<td style="text-align:center; vertical-align:top; padding-top:8px;">
                       <input type="number" min="0" step="${moq}" value="${val}" style="width:50px;padding:2px 4px;${style};border-radius:4px;font-size:12px;text-align:center" onchange="majQuantitePO('${fournSafe}','${idSafe}','${nomSafe}',${i},this.value,'${tipo}','${r.customId||''}')">
                       <div style="display:flex; flex-direction:column; align-items:center;">
@@ -2595,7 +2606,7 @@ function fermerModifPO(){
 }
 
 function majQuantiteModifPOLigne(idx, val){
-  MODIF_PO_LINES[idx].quantite = Math.max(0, parseInt(val)||0);
+  MODIF_PO_LINES[idx].quantite = Math.max(0, parseFloat(val)||0); // Modifié
   renderLignesModifPO();
 }
 
@@ -2691,7 +2702,7 @@ function ajouterProduitPersonnaliseModifPO(){
   
   const nom = (nomEl?.value||'').trim();
   const prix = Math.max(0, parseFloat(prixEl?.value)||0);
-  const qte = Math.max(1, parseInt(qteEl?.value)||1);
+  const qte = Math.max(0.01, parseFloat(qteEl?.value)||1); // Modifié
   
   if(!nom){ alert('Veuillez indiquer un nom de produit.'); return; }
   
@@ -2837,7 +2848,7 @@ function retirerLigneManuelle(idx){
 }
 
 function majQuantiteManuelle(idx, val){
-  MANUAL_LINES[idx].quantite = Math.max(0, parseInt(val) || 0);
+  MANUAL_LINES[idx].quantite = Math.max(0, parseFloat(val) || 0); // Modifié
   majTotalManuel();
 }
 
@@ -2852,7 +2863,7 @@ function ajouterProduitPersonnaliseManuel(){
   
   const nom = (nomEl?.value||'').trim();
   const prix = Math.max(0, parseFloat(prixEl?.value)||0);
-  const qte = Math.max(1, parseInt(qteEl?.value)||1);
+  const qte = Math.max(0.01, parseFloat(qteEl?.value)||1); // Modifié
   
   if(!nom){ alert('Indique un nom de produit.'); return; }
   
@@ -3132,7 +3143,7 @@ function ignorerForecast(fourn, idVariante){
 
 // 6. Recalcule les mathématiques si tu modifies la quantité ou le prix à la main dans le tableau
 function majQuantitePO(fourn, idVariante, nom, sem, val, tipo, customId){
-    const v = Math.max(0, parseInt(val)||0);
+    const v = Math.max(0, parseFloat(val)||0); // Modifié pour accepter les décimales
     if(tipo === 'manuel'){
         if(!PO_EXTRAS[fourn]) PO_EXTRAS[fourn] = [];
         let ex = PO_EXTRAS[fourn].find(x => x.idVariante === idVariante);
