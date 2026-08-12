@@ -55,6 +55,10 @@
       <div class="ni" onclick="nav('scanback',this)"><div class="nil"><span>🤝</span>Scan-Backs</div></div>
       <!-- FIN NOUVEAU -->
 
+      <!-- NOUVEAU : SECTION QUALITÉ DE DONNÉE -->
+      <div class="sbl">Maintenance</div>
+      <div class="ni" onclick="nav('mapping',this)"><div class="nil"><span>🛠️</span>Qualité de Donnée</div></div>
+
     <div class="ni" onclick="nav('dormant',this)"><div class="nil"><span>💤</span>Stock Dormant</div></div>
   </div>
   <div class="con">
@@ -325,8 +329,63 @@
       </div>
     </div>
     <!-- FIN VUE SCAN-BACK -->
+
+    <!-- VUE QUALITÉ DE DONNÉE -->
+    <div id="v-mapping" class="view">
+      <div class="sh"><span class="st">Mapping des IDs (Correction Ventes N-1)</span><span class="rc" id="rc-map"></span></div>
+      
+      <div style="background:var(--w);border:1px solid var(--b1);border-radius:10px;padding:16px;margin-bottom:16px;">
+        <div style="font-size:12px;font-weight:600;margin-bottom:10px;color:var(--t2);">Lier un ancien ID orphelin à un nouvel ID Shopify</div>
+        <div style="display:flex;gap:10px;align-items:center;flex-wrap:wrap;">
+          <input type="text" id="map-old" class="fin" placeholder="Ancien ID (ex: 41234...)" style="flex:1;min-width:140px;">
+          <span style="color:var(--t3);font-weight:bold;">→</span>
+          <input type="text" id="map-new" class="fin" placeholder="Nouvel ID (ex: 49876...)" style="flex:1;min-width:140px;">
+          <input type="text" id="map-nom" class="fin" placeholder="Nom du produit" style="flex:1.5;min-width:160px;">
+          <input type="text" id="map-var" class="fin" placeholder="Variante (optionnel)" style="flex:1;min-width:120px;">
+          <button class="fb on" id="btn-save-map" onclick="enregistrerMapping()" style="padding:6px 16px;">Lier les IDs</button>
+        </div>
+      </div>
+
+      <div class="tw" style="overflow-x:auto">
+        <table>
+          <thead>
+            <tr>
+              <th onclick="srt('map','nom',this)">Produit</th>
+              <th onclick="srt('map','variante',this)">Variante</th>
+              <th onclick="srt('map','ancien',this)">Ancien ID (Orphelin)</th>
+              <th onclick="srt('map','nouveau',this)">Nouvel ID (Actif)</th>
+            </tr>
+          </thead>
+          <tbody id="tb-mapping"></tbody>
+        </table>
+      </div>
+    </div>
+    <!-- FIN VUE QUALITÉ DE DONNÉE -->
+
+    
   </div>
 </div>
+
+<!-- NOUVEAU: MODAL DE CONFIRMATION DE COMMANDE -->
+<div id="modal-confirm-po" style="display:none;position:fixed;inset:0;background:rgba(0,0,0,.4);z-index:600;align-items:center;justify-content:center" onclick="if(event.target===this)fermerConfirmPO()">
+  <div style="background:var(--w);border-radius:12px;width:600px;max-width:92vw;max-height:85vh;overflow-y:auto;padding:22px">
+    <div style="display:flex;align-items:center;margin-bottom:16px">
+      <span style="font-size:14px;font-weight:600" id="cpo-title">Confirmer la commande</span>
+      <button class="rbtn" onclick="fermerConfirmPO()" style="margin-left:auto">✕</button>
+    </div>
+    
+    <div id="cpo-lignes" style="margin-bottom:14px; max-height: 400px; overflow-y: auto; padding-right: 8px;"></div>
+    
+    <div id="cpo-total" style="text-align:right;font-size:14px;font-weight:700;color:var(--br);margin-bottom:16px; padding-top: 10px; border-top: 1px solid var(--b2);"></div>
+    
+    <div style="display:flex;gap:8px;justify-content:flex-end">
+      <button class="rbtn" onclick="fermerConfirmPO()">Annuler</button>
+      <button class="fb on" id="cpo-submit" onclick="validerConfirmPO()">Envoyer à Shopify</button>
+    </div>
+  </div>
+</div>
+<!-- FIN NOUVEAU MODAL -->
+
 <div id="modal-cmd-overlay" style="display:none;position:fixed;inset:0;background:rgba(0,0,0,.4);z-index:500;align-items:center;justify-content:center" onclick="if(event.target===this)fermerCommandeManuelle()">
   <div style="background:var(--w);border-radius:12px;width:600px;max-width:92vw;max-height:85vh;overflow-y:auto;padding:22px">
     <div style="display:flex;align-items:center;margin-bottom:16px">
@@ -345,7 +404,7 @@
     <div style="margin-top:4px;display:flex;gap:6px;align-items:center;margin-bottom:14px">
       <input type="text" placeholder="Nom du produit…" id="mc-cust-nom" style="flex:1;padding:6px 8px;border:1px solid var(--b2);border-radius:6px;font-size:12px">
       <input type="number" min="0" step="0.01" placeholder="Prix unit." id="mc-cust-prix" style="width:80px;padding:6px 8px;border:1px solid var(--b2);border-radius:6px;font-size:12px;text-align:right">
-      <input type="number" min="1" value="1" placeholder="Qté" id="mc-cust-qte" style="width:60px;padding:6px 8px;border:1px solid var(--b2);border-radius:6px;font-size:12px;text-align:center">
+      <input type="number" min="0.01" step="0.01" value="1" placeholder="Qté" id="mc-cust-qte" style="width:60px;padding:6px 8px;border:1px solid var(--b2);border-radius:6px;font-size:12px;text-align:center">
       <button class="fb" style="padding:6px 12px;font-size:12px" onclick="ajouterProduitPersonnaliseManuel()">+ Ajouter custom</button>
     </div>
     
@@ -388,7 +447,7 @@
     <div style="margin-bottom:16px;display:flex;gap:6px;align-items:center">
       <input type="text" placeholder="Nom du produit personnalisé…" id="mp-cust-nom" style="flex:1;padding:6px 8px;border:1px solid var(--b2);border-radius:6px;font-size:12px">
       <input type="number" min="0" step="0.01" placeholder="Prix unit." id="mp-cust-prix" style="width:80px;padding:6px 8px;border:1px solid var(--b2);border-radius:6px;font-size:12px;text-align:right">
-      <input type="number" min="1" value="1" placeholder="Qté" id="mp-cust-qte" style="width:60px;padding:6px 8px;border:1px solid var(--b2);border-radius:6px;font-size:12px;text-align:center">
+      <input type="number" min="0.01" step="0.01" value="1" placeholder="Qté" id="mp-cust-qte" style="width:60px;padding:6px 8px;border:1px solid var(--b2);border-radius:6px;font-size:12px;text-align:center">
       <button class="fb" style="padding:6px 12px;font-size:12px" onclick="ajouterProduitPersonnaliseModifPO()">+ Ajouter custom</button>
     </div>
 
