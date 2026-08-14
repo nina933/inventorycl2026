@@ -331,8 +331,21 @@ async function loadData(){
   try {
     // 2. THE FETCH: The app literally "calls" the Google Sheet URL and asks for the data.
     setMsg('Chargement des données en live. Attendez un instant...');
-    const resp=await fetch(URL_AS);
-    if(!resp.ok)throw new Error('Erreur réseau: '+resp.status);
+    
+    // 🚀 NEW: Auto-Retry Engine (Tries up to 3 times if Google is sleeping)
+    let resp;
+    let retries = 3;
+    while (retries > 0) {
+        resp = await fetch(URL_AS);
+        if (resp.ok) break; // If it works, break out of the loop!
+        
+        retries--;
+        if (retries === 0) throw new Error('Erreur réseau: ' + resp.status);
+        
+        // If it failed, wait 1.5 seconds and try again silently
+        setMsg('Le serveur Google se réveille... (' + retries + ' essai(s) restant(s))');
+        await new Promise(resolve => setTimeout(resolve, 1500)); 
+    }
 
     // If it succeeds before 60 seconds, we clear the timer so it doesn't trigger anyway
     // clearTimeout(timeoutId);
