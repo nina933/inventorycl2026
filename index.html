@@ -8,6 +8,23 @@
 
 <link rel="stylesheet" href="styles.css">
 
+<style>
+  /* 🚀 STICKY HEADERS: UPDATED FIX */
+  .tw {
+    /* Turns the table wrapper into its own scrolling window */
+    max-height: calc(100vh - 160px) !important; 
+    overflow-y: auto !important; 
+  }
+  
+  .tw th {
+    position: sticky !important;
+    top: 0 !important; /* Locks it to the top of the wrapper */
+    z-index: 10 !important; /* Forces headers to hover above the moving rows */
+    background-color: var(--w, #ffffff) !important; /* Solid background so text doesn't bleed through */
+    box-shadow: 0 2px 5px rgba(0,0,0,0.08) !important; /* Adds a clean drop-shadow to separate header from data */
+  }
+</style>
+
 </head>
 <body>
 <div class="lov" id="lov">
@@ -25,7 +42,7 @@
       <button class="fb eq-btn" onclick="setEquipe('clovis',this)" style="padding:4px 10px;font-size:12px">Clovis</button>
     </div>
     <button class="rbtn" onclick="loadData()">↻ Actualiser</button>
-  <button class="rbtn" onclick="alert('Sans équipe:\n'+[...new Set(PRODS.map(p=>p.fourn))].filter(f=>!VENDOR_MAP[f]&&f).join('\n'))">🔍 Sans équipe</button>
+  <button class="rbtn" onclick="ouvrirModalSansEquipe()">🔍 Sans équipe</button>
   </div>
 </div>
 <div class="overlay" id="overlay" onclick="toggleSidebar()"></div>
@@ -100,8 +117,8 @@
           <th onclick="srt('s','fourn',this)">Fournisseur</th>
           <th onclick="srt('s','pareto',this)">Pareto</th>
           <th onclick="srt('s','stock',this)" style="text-align:right">Stock</th>
-          <th onclick="srt('s','wks_left',this)" style="text-align:right">Sem. rest.</th>
           <th onclick="srt('s','statut',this)">Statut</th>
+          <th onclick="srt('s','wks_left',this)" style="text-align:right">Sem. rest.</th>
           <th style="text-align:right">En commande</th>
           <th style="text-align:right" id="th-fc-s">Forecast M06</th>
           <th style="text-align:right">Solde</th>
@@ -365,6 +382,29 @@
     
   </div>
 </div>
+
+<!-- MODAL SANS ÉQUIPE -->
+<div id="modal-sans-equipe" style="display:none;position:fixed;inset:0;background:rgba(0,0,0,.4);z-index:650;align-items:center;justify-content:center" onclick="if(event.target===this)fermerModalSansEquipe()">
+  <div style="background:var(--w);border-radius:12px;width:500px;max-width:92vw;max-height:85vh;overflow-y:auto;padding:22px;box-shadow:0 10px 25px rgba(0,0,0,0.15)">
+    <div style="display:flex;align-items:center;margin-bottom:14px">
+      <span style="font-size:15px;font-weight:600;display:flex;align-items:center;gap:6px">
+        <span>🔍</span> Fournisseurs sans équipe
+      </span>
+      <button class="rbtn" onclick="fermerModalSansEquipe()" style="margin-left:auto">✕</button>
+    </div>
+    
+    <div style="background:var(--amb,#fff8e1);border:1px solid var(--am,#f59e0b);border-radius:8px;padding:12px;margin-bottom:16px;font-size:12px;color:var(--t1,#1a1714);line-height:1.4">
+      Ces fournisseurs possèdent des produits dans le stock actif, mais <strong>n'ont aucune correspondance dans l'onglet « Tableau correspondance »</strong>. Ils ne sont donc assignés à aucun membre de l'équipe (Nina / Clovis).
+    </div>
+
+    <div id="se-liste-fourns" style="margin-bottom:18px"></div>
+
+    <div style="display:flex;justify-content:flex-end">
+      <button class="fb on" onclick="fermerModalSansEquipe()">Fermer</button>
+    </div>
+  </div>
+</div>
+<!-- FIN MODAL SANS ÉQUIPE -->
 
 <!-- NOUVEAU: MODAL DE CONFIRMATION DE COMMANDE -->
 <div id="modal-confirm-po" style="display:none;position:fixed;inset:0;background:rgba(0,0,0,.4);z-index:600;align-items:center;justify-content:center" onclick="if(event.target===this)fermerConfirmPO()">

@@ -678,10 +678,15 @@ async function loadData(){
       if(!byCmdT[cmd])byCmdT[cmd]={cmd,fourn:String(r[4]||'').trim(),
       livraison:fmtD(String(r[7]||'').trim())||'—',date_cmd:'',lignes:[],total:0};      
       const qty=n(r[6]||0);
-      const nouvelleDateT=String(r[9]||'').trim();
+      const nouvelleDateT=String(r[9]||'').trim(); // Column J (Index 9)
       const comT=nouvelleDateT?fmtD(nouvelleDateT):'';
       
-      const statusLigne = String(r[9]||'').trim(); // NOUVEAU: Extraction du statut (Colonne J)
+      // 🚀 The new date overwrites the master delivery date
+      if (nouvelleDateT) {
+          byCmdT[cmd].livraison = fmtD(nouvelleDateT);
+      }
+      
+      const statusLigne = String(r[13]||'').trim(); // 🚀 Extraction du statut (Column N = Index 13)
       
       // FIX: Variante is now r[2], ID is now r[3]
       byCmdT[cmd].lignes.push({
@@ -1020,13 +1025,17 @@ function rAlertes(){
 
     const isR=p.statut==='rupture',isC=p.statut==='critique';
 
-    // Strict requirement: Only show items that are Out of Stock or Critical
     if(!isR&&!isC)
       return false;
 
+    // Hide the alert if incoming orders completely solve the deficit and cover the demand
+    if (p.stock + p.en_cmd >= Math.max(0, p.demande_cumulee)) {
+        return false;
+    }
+
     // Strict requirement: Don't flag active items as critical if nobody wants to buy them
     if(p.statut!=='rupture'&&p.demande_cumulee<=0)
-      return false;    
+      return false;   
 
     // Team check (Nina vs Clovis)
     if(!equipeMatch(p.fourn))
@@ -1054,10 +1063,11 @@ function rAlertes(){
 
 
   // CALCULATE KPIs: Generate the numbers for the colorful summary boxes at the top
-  const ruptures=PRODS.filter(p=>p.statut==='rupture'&&p.demande_cumulee>0&&equipeMatch(p.fourn)).length;
-  const crit=PRODS.filter(p=>p.statut==='critique'&&p.demande_cumulee>0&&equipeMatch(p.fourn)).length;
-  const actifs=PRODS.filter(p=>p.statut_produit==='active'&&equipeMatch(p.fourn)).length;
-  const pa=PRODS.filter(p=>(p.statut==='rupture'||p.statut==='critique')&&p.pareto==='A'&&p.demande_cumulee>0&&equipeMatch(p.fourn)).length;
+  // CALCULATE KPIs: Generate the numbers for the colorful summary boxes at the top
+  const ruptures = PRODS.filter(p => p.statut === 'rupture' && p.demande_cumulee > 0 && equipeMatch(p.fourn) && (p.stock + p.en_cmd) < Math.max(0, p.demande_cumulee)).length;
+  const crit = PRODS.filter(p => p.statut === 'critique' && p.demande_cumulee > 0 && equipeMatch(p.fourn) && (p.stock + p.en_cmd) < p.demande_cumulee).length;
+  const actifs = PRODS.filter(p => p.statut_produit === 'active' && equipeMatch(p.fourn)).length;
+  const pa = PRODS.filter(p => (p.statut === 'rupture' || p.statut === 'critique') && p.pareto === 'A' && p.demande_cumulee > 0 && equipeMatch(p.fourn) && (p.stock + p.en_cmd) < Math.max(0, p.demande_cumulee)).length;
 
   // Inject the KPI boxes into the HTML
   document.getElementById('mg-a').innerHTML=`
@@ -1065,7 +1075,7 @@ function rAlertes(){
     <div class="mc" onclick="clearDD('dd-pa','pa',null);clearDD('dd-fa','fa',null);sC('sta',['rupture']);updDD('dd-sta','sta');rAlertes()"><div class="mcl">Ruptures (stock=0)</div><div class="mcv r">${fmt(ruptures)}</div><div class="mcs">↗ Cliquer pour voir</div></div>
     <div class="mc" onclick="clearDD('dd-pa','pa',null);clearDD('dd-fa','fa',null);sC('sta',['critique']);updDD('dd-sta','sta');rAlertes()"><div class="mcl">Critique</div><div class="mcv a">${fmt(crit)}</div><div class="mcs">↗ Cliquer pour voir</div></div>
     <div class="mc" onclick="clearDD('dd-sta','sta',null);clearDD('dd-fa','fa',null);sC('pa',['A']);updDD('dd-pa','pa');rAlertes()"><div class="mcl">Alertes Pareto A</div><div class="mcv b">${fmt(pa)}</div><div class="mcs">↗ Cliquer pour voir</div></div>
-    <div class="mc" onclick="nav('receptions',document.querySelectorAll('.ni')[6])"><div class="mcl">Réceptions en cours</div><div class="mcv g">${fmt(STOCKY.length)}</div><div class="mcs">↗ Voir les commandes</div></div>`;
+    <div class="mc" onclick="nav('receptions',document.querySelectorAll('.ni')[5])"><div class="mcl">Réceptions en cours</div><div class="mcv g">${fmt(STOCKY.length)}</div><div class="mcs">↗ Voir les commandes</div></div>`;
   
   document.getElementById('nb-a').textContent=rows.length||'';
   document.getElementById('rc-a').textContent=rows.length+' produit(s)';
@@ -1081,7 +1091,7 @@ function rAlertes(){
     <td style="text-align:right"><span class="${sc(p.stock)}">${fmt(p.stock)}</span></td>
     <td>${bS(p.statut,p.statut_produit)}</td>
     <td style="text-align:right;font-size:12px">${p.wks_left!==null?p.wks_left+' sem.':'—'}</td>
-    <td style="text-align:right">${p.en_cmd>0?fmt(p.en_cmd):'—'}</td>
+    <td style="text-align:right">${p.en_cmd > 0 ? `<span class="cmd-link" onclick="allerAuxReceptions('${p.nom.replace(/'/g,"\\\\'")}')">${fmt(p.en_cmd)}</span>` : '—'}</td>
     <td style="text-align:right">${fmt(p.fc_m05)}</td>
     <td style="text-align:right;font-weight:500;color:${p.statut==='rupture'?'var(--re)':p.statut==='critique'?'var(--am)':'var(--gr)'}">${fmt(p.stock+p.en_cmd)}</td>
   </tr>`;
@@ -1120,7 +1130,7 @@ function rStocks(){
     <td style="text-align:right"><span class="${sc(p.stock)}">${fmt(p.stock)}</span></td>
     <td>${bS(p.statut,p.statut_produit)}</td>
     <td style="text-align:right;font-size:12px">${p.wks_left!==null?p.wks_left+' sem.':'—'}</td>
-    <td style="text-align:right">${p.en_cmd>0?fmt(p.en_cmd):'—'}</td>
+    <td style="text-align:right">${p.en_cmd > 0 ? `<span class="cmd-link" onclick="allerAuxReceptions('${p.nom.replace(/'/g,"\\\\'")}')">${fmt(p.en_cmd)}</span>` : '—'}</td>
     <td style="text-align:right">${fmt(p.fc_m05)}</td>
     <td style="text-align:right;font-weight:500;color:${p.statut==='rupture'?'var(--re)':p.statut==='critique'?'var(--am)':'var(--gr)'}">${fmt(p.stock+p.en_cmd)}</td>
   </tr>`;
@@ -1193,7 +1203,7 @@ function rFourn(){
                 <td>${bP(p.pareto)}</td>
                 <td style="text-align:right"><span class="${sc(p.stock)}">${fmt(p.stock)}</span></td>
                 <td>${bS(p.statut,p.statut_produit)}</td>
-                <td style="text-align:right">${p.en_cmd>0?fmt(p.en_cmd):'—'}</td>
+                <td style="text-align:right">${p.en_cmd > 0 ? `<span class="cmd-link" onclick="allerAuxReceptions('${p.nom.replace(/'/g,"\\\\'")}')">${fmt(p.en_cmd)}</span>` : '—'}</td>
                 <td style="text-align:right">${fmt(p.fc_m05)}</td>
             </tr>`;
             }).join('')}
@@ -1277,15 +1287,25 @@ function rReceptions(){
   const W=cw();
 
   // Helper function to filter by target delivery week
-  function matchSemaine(c){
-    if(!sw)return true;
-    if(!c.livraison||c.livraison==='—')return true; // Don't hide orders without a date
-    try{
-      const d=new Date(c.livraison.split('/').reverse().join('-'));
-      const s=new Date(d.getFullYear(),0,1);
-      const cmdSw=Math.ceil(((d-s)/86400000+s.getDay()+1)/7);
-      return cmdSw===parseInt(sw);
-    }catch(e){ return true; }
+  function matchSemaine(c) {
+    if (!sw) return true;
+    if (!c.livraison || c.livraison === '—') return true; // Don't hide orders without a date
+    try {
+      let d;
+      // Robust Date Parsing (DD/MM/YY -> YYYY-MM-DD)
+      if (c.livraison.includes('/')) {
+        const parts = c.livraison.split('/');
+        d = new Date(parseInt(parts[2]) + 2000, parseInt(parts[1]) - 1, parseInt(parts[0]));
+      } else {
+        d = new Date(c.livraison);
+      }
+      
+      const s = new Date(d.getFullYear(), 0, 1);
+      const cmdSw = Math.ceil(((d - s) / 86400000 + s.getDay() + 1) / 7);
+      return cmdSw === parseInt(sw);
+    } catch(e) { 
+      return true; 
+    }
   }
 
   // 1. Filter the Stocky Orders
@@ -1498,6 +1518,26 @@ function rPO(){
     // NEW RULE: Check if the user manually hid this forecast item
     if(PO_IGNORED[r.fourn] && PO_IGNORED[r.fourn].includes(r.idVariante)) return false;
     
+    // 🚀 NOUVEAU FILTRE : Exclure les faibles rotations (< 1 vente/mois) sauf si en rupture
+    const pMatch = PRODS.find(x => x.idVariante === r.idVariante || x.nom === r.nom);
+    const fMatch = FORECAST.find(x => x.nom === r.nom);
+    
+    let forecastAnnuel = 0;
+    if (fMatch) {
+        // Calcul du forecast total sur l'année
+        forecastAnnuel = (fMatch.M01||0) + (fMatch.M02||0) + (fMatch.M03||0) + (fMatch.M04||0) + 
+                         (fMatch.M05||0) + (fMatch.M06||0) + (fMatch.M07||0) + (fMatch.M08||0) + 
+                         (fMatch.M09||0) + (fMatch.M10||0) + (fMatch.M11||0) + (fMatch.M12||0);
+    }
+    
+    const currentStock = pMatch ? pMatch.stock : 0;
+    
+    // Rejeter si le produit se vend moins de 1 fois par mois (total < 12) 
+    // ET qu'il n'est pas strictement en rupture de stock (< 0)
+    if (forecastAnnuel < 12 && currentStock >= 0) {
+        return false;
+    }
+
     return semaines.some(sw=>r.sems[sw]>0);
   });
   
@@ -3189,7 +3229,12 @@ function rechercherProduitBlock(fourn, blocId){
     if(!q){ resDiv.style.display='none'; resDiv.innerHTML=''; return; }
 
     // Cherche dans le catalogue les produits du fournisseur qui correspondent
-    const matches = PRODS.filter(p => p.fourn === fourn && p.idVariante && p.nom.toLowerCase().includes(q)).slice(0,8);
+    // Searches BOTH the main name and the variant name, and increases the limit to 15
+    const matches = PRODS.filter(p => 
+        p.fourn === fourn && 
+        p.idVariante && 
+        (p.nom.toLowerCase().includes(q) || (p.variante && p.variante.toLowerCase().includes(q)))
+    ).slice(0, 15);
 
     if(!matches.length){
         resDiv.style.display='block';
@@ -3563,6 +3608,67 @@ async function enregistrerMapping() {
     } finally {
         btn.disabled = false;
         btn.textContent = 'Lier les IDs';
+    }
+}
+
+// ==========================================================
+// MODAL : FOURNISSEURS SANS ÉQUIPE
+// ==========================================================
+function ouvrirModalSansEquipe() {
+    const modal = document.getElementById('modal-sans-equipe');
+    const cont = document.getElementById('se-liste-fourns');
+    if (!modal || !cont) return;
+
+    // Scan unique active suppliers and filter out assigned ones
+    const sansEquipe = [...new Set(PRODS.map(p => p.fourn))]
+        .filter(f => !VENDOR_MAP[f] && f)
+        .sort((a, b) => a.localeCompare(b));
+
+    if (sansEquipe.length === 0) {
+        cont.innerHTML = `
+            <div style="text-align:center;padding:20px;color:var(--gr,#10b981);font-weight:600;font-size:13px">
+                ✅ Tous les fournisseurs sont correctement assignés dans le Google Sheet !
+            </div>`;
+    } else {
+        cont.innerHTML = `
+            <div style="font-size:12px;font-weight:600;color:var(--t2);margin-bottom:8px">
+                ${sansEquipe.length} fournisseur(s) non assigné(s) :
+            </div>
+            <div style="max-height:220px;overflow-y:auto;border:1px solid var(--b1);border-radius:8px;padding:8px 12px;background:var(--bg,#faf8f5)">
+                ${sansEquipe.map(f => `
+                    <div style="display:flex;align-items:center;justify-content:space-between;padding:8px 0;border-bottom:1px solid var(--b2,#eee);font-size:13px">
+                        <span style="font-weight:500">${f}</span>
+                        <span style="font-size:11px;color:var(--re);background:var(--reb);padding:2px 6px;border-radius:4px;font-weight:600">Non assigné</span>
+                    </div>
+                `).join('')}
+            </div>`;
+    }
+
+    modal.style.display = 'flex';
+}
+
+function fermerModalSansEquipe() {
+    const modal = document.getElementById('modal-sans-equipe');
+    if (modal) modal.style.display = 'none';
+}
+
+// ==========================================================
+// NAVIGATION RAPIDE : ALLER AUX RÉCEPTIONS
+// ==========================================================
+function allerAuxReceptions(nomProduit) {
+    // 1. Appuyer sur l'onglet Réceptions dans le menu de gauche
+    const btnReceptions = document.querySelectorAll('.ni')[7]; 
+    if (btnReceptions) nav('receptions', btnReceptions);
+
+    // 2. Coller le nom du produit dans la barre de recherche
+    const searchBar = document.getElementById('s-r');
+    if (searchBar) {
+        // Enlève la variante s'il y en a une pour une recherche plus large
+        const nomPropre = nomProduit.split(' - ')[0]; 
+        searchBar.value = nomPropre;
+        
+        // 3. Déclencher le filtre
+        rReceptions();
     }
 }
 

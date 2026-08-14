@@ -517,6 +517,17 @@ tbody tr:hover td { background: #FAFAF9; }
     color: var(--t1);
 }
 
+/* 🚀 NEW: Clickable Link Styling for Incoming Orders */
+.cmd-link {
+    color: var(--bl, #1a73e8); /* Makes it blue */
+    text-decoration: underline;
+    cursor: pointer;
+    font-weight: 500;
+}
+.cmd-link:hover {
+    color: var(--br, #8B5E2A); /* Changes color when hovered */
+}
+
 .pv {
     font-size: 11px;
     color: var(--t3);
