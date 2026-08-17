@@ -117,8 +117,8 @@
           <th onclick="srt('s','fourn',this)">Fournisseur</th>
           <th onclick="srt('s','pareto',this)">Pareto</th>
           <th onclick="srt('s','stock',this)" style="text-align:right">Stock</th>
-          <th onclick="srt('s','statut',this)">Statut</th>
           <th onclick="srt('s','wks_left',this)" style="text-align:right">Sem. rest.</th>
+          <th onclick="srt('s','statut',this)">Statut</th>
           <th style="text-align:right">En commande</th>
           <th style="text-align:right" id="th-fc-s">Forecast M06</th>
           <th style="text-align:right">Solde</th>
@@ -191,6 +191,12 @@
         <select class="fsel" id="p-r" onchange="rReceptions()"><option value="">Tout Pareto</option><option>A</option><option>B</option><option>C</option></select>
         <select class="fsel" id="st-r" onchange="rReceptions()"><option value="">Tous statuts</option><option value="rupture_critique">Rupture + Critique</option><option value="rupture">Rupture uniquement</option><option value="critique">Critique uniquement</option><option value="active">Actif</option></select>
         <select class="fsel" id="sw-r" onchange="rReceptions()" style="min-width:150px"></select>
+        
+        <!-- 🚀 NEW: History Toggle -->
+        <label style="margin-left:auto; display:flex; align-items:center; gap:6px; font-size:12px; cursor:pointer; color:var(--t2); font-weight:500;">
+          <input type="checkbox" id="cb-history-r" onchange="rReceptions()" style="accent-color:var(--br); cursor:pointer;">
+          Inclure l'historique (Reçu / Annulé)
+        </label>
       </div>
       <div id="rc-cont"></div>
     </div>
@@ -237,14 +243,17 @@
       </div>
 
       <div class="tw"><table>
-        <thead><tr><th onclick="srt('pr','nom',this)">Produit</th><th onclick="srt('pr','marque',this)">Marque</th><th onclick="srt('pr','statut',this)">Statut</th><th onclick="srt('pr','sd',this)">Semaines</th><th onclick="srt('pr','debut',this)">Début</th><th onclick="srt('pr','fin',this)">Fin</th><th style="text-align:right" onclick="srt('pr','boost',this)">Boost%</th><th style="text-align:right" onclick="srt('pr','prix',this)">Prix promo</th></tr></thead>        <tbody id="tb-pr"></tbody>
+        <thead><tr><th onclick="srt('pr','nom',this)">Produit</th><th onclick="srt('pr','sku',this)">SKU</th><th onclick="srt('pr','marque',this)">Marque</th><th onclick="srt('pr','statut',this)">Statut</th><th onclick="srt('pr','sd',this)">Semaines</th><th onclick="srt('pr','debut',this)">Début</th><th onclick="srt('pr','fin',this)">Fin</th><th style="text-align:right" onclick="srt('pr','boost',this)">Boost%</th><th style="text-align:right" onclick="srt('pr','prix',this)">Prix promo</th></tr></thead>        <tbody id="tb-pr"></tbody>
       </table></div>
     </div>
     <div id="v-dormant" class="view">
       <div class="sh"><span class="st">Analyse : Stock Dormant & Capital Immobilisé</span><span class="rc" id="rc-dormant"></span></div>
       
       <div class="fl">
-        <span style="font-size:12px; color:var(--t2);">Dormant après (semaines) :</span>
+        <!-- 🚀 NEW: The Search Bar -->
+        <input class="fin" id="s-d" placeholder="Rechercher produit…" oninput="rDormant()" style="width:180px">
+        
+        <span style="font-size:12px; color:var(--t2); margin-left:8px;">Dormant après (semaines) :</span>
         <input type="number" id="d-weeks" class="fin" value="8" min="1" style="width: 70px;">
         
         <div class="dd" id="dd-fdormant">

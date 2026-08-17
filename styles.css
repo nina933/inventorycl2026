@@ -41,12 +41,17 @@
     --blb: #E8F3FB;      /* Blue Light */
 }
 
+html, body {
+    height: 100vh;
+    overflow: hidden;
+}
+
 body {
     background: var(--bg);
     color: var(--t1);
     font-family: 'Inter', sans-serif;
     font-size: 13px;
-    min-height: 100vh;
+    height: 100vh;
     display: flex;
     flex-direction: column;
 }
@@ -117,6 +122,7 @@ body {
     flex: 1;
     height: calc(100vh - 48px);
     overflow: hidden;
+    width: 100vw;
 }
 
 /* Sidebar */
@@ -251,7 +257,7 @@ body {
 /* Metric Cards Grid */
 .mg {
     display: grid;
-    grid-template-columns: repeat(auto-fill, minmax(180px, 1fr));
+    grid-template-columns: repeat(auto-fit, minmax(150px, 1fr));
     gap: 14px;
     margin-bottom: 24px;
 }
@@ -352,7 +358,10 @@ body {
     color: var(--t1);
     font-family: 'Inter', sans-serif;
     outline: none;
-    width: 210px;
+    width: 100%;
+    max-width: 210px;
+    flex: 1;
+    min-width: 150px;
 }
 
 .fin:focus { border-color: var(--br); }
@@ -526,6 +535,26 @@ tbody tr:hover td { background: #FAFAF9; }
 }
 .cmd-link:hover {
     color: var(--br, #8B5E2A); /* Changes color when hovered */
+}
+
+/* 🚀 NEW: Clickable Promo Badge */
+.promo-link {
+    font-size: 10px;
+    color: var(--am, #A0620A);
+    background: var(--amb, #FEF3E2);
+    border: 1px solid var(--am, #A0620A);
+    padding: 2px 6px;
+    border-radius: 4px;
+    margin-left: 8px;
+    cursor: pointer;
+    vertical-align: middle;
+    font-weight: 600;
+    transition: all 0.15s ease;
+    white-space: nowrap;
+}
+.promo-link:hover {
+    background: var(--am, #A0620A);
+    color: var(--w, #FFF);
 }
 
 .pv {
@@ -756,3 +785,24 @@ tbody tr:hover td { background: #FAFAF9; }
 .rbtn:hover {
     background: var(--bg);
 }
+
+
+
+/* ==========================================================
+   RECEPTIONS ACCORDION COLOR SYSTEM
+   ========================================================== */
+.rg-partiel .rh { background: #E0F2F1; border-bottom: 1px solid #B2DFDB; }
+.rg-partiel .rh:hover { background: #B2DFDB; }
+.rg-partiel .rh-cmd { color: #00796B; }
+
+.rg-late .rh { background: var(--reb); border-bottom: 1px solid var(--re); }
+.rg-late .rh:hover { background: #FADBD8; }
+.rg-late .rh-cmd { color: var(--re); }
+
+.rg-received .rh { background: var(--grb); border-bottom: 1px solid var(--gr); opacity: 0.85; }
+.rg-received .rh:hover { opacity: 1; }
+.rg-received .rh-cmd { color: var(--gr); }
+
+.rg-cancelled .rh { background: #F3F4F6; border-bottom: 1px solid #D1D5DB; opacity: 0.7; }
+.rg-cancelled .rh:hover { opacity: 1; }
+.rg-cancelled .rh-cmd { color: #6B7280; text-decoration: line-through; }

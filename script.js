@@ -229,23 +229,24 @@ function fmtM(v){
   return n(v).toLocaleString('fr-CA',{minimumFractionDigits:0,maximumFractionDigits:0})+' $';
 }
 
-// Computers read dates as giant ugly timestamps (e.g., 2026-06-25T04:00:00.000Z). 
-// This tool chops that up and returns a clean, familiar date: 25/06/26.
+// Computers read dates as giant ugly timestamps. This tool chops that up and returns a clean date.
 function fmtD(iso){
-  if(!iso||iso==='')
-  return'—';
-  try{let d;
+  if(!iso||iso==='') return'—';
+  try{
+    let d;
     if(typeof iso==='string'&&iso.includes('T')){
-    const p=iso.substring(0,10).split('-');
-    d=new Date(parseInt(p[0]),parseInt(p[1])-1,parseInt(p[2]));}
-  else{d=new Date(iso);}if(isNaN(d))
-    return String(iso).substring(0,10);
-  const dd=String(d.getDate()).padStart(2,'0');
-  const mm=String(d.getMonth()+1).padStart(2,'0');
-  const yy=String(d.getFullYear()).substring(2);
-  return dd+'/'+mm+'/'+yy;}
-  catch{
-    return String(iso).substring(0,10);
+        const p=iso.substring(0,10).split('-');
+        d=new Date(parseInt(p[0]),parseInt(p[1])-1,parseInt(p[2]));
+    } else {
+        d=new Date(iso);
+    }
+    if(isNaN(d)) return String(iso).trim(); // 🚀 FIX: No longer chops text like "Fin septembre"
+    const dd=String(d.getDate()).padStart(2,'0');
+    const mm=String(d.getMonth()+1).padStart(2,'0');
+    const yy=String(d.getFullYear()).substring(2);
+    return dd+'/'+mm+'/'+yy;
+  } catch{
+    return String(iso).trim();
   }
 }
 
@@ -331,21 +332,8 @@ async function loadData(){
   try {
     // 2. THE FETCH: The app literally "calls" the Google Sheet URL and asks for the data.
     setMsg('Chargement des données en live. Attendez un instant...');
-    
-    // 🚀 NEW: Auto-Retry Engine (Tries up to 3 times if Google is sleeping)
-    let resp;
-    let retries = 3;
-    while (retries > 0) {
-        resp = await fetch(URL_AS);
-        if (resp.ok) break; // If it works, break out of the loop!
-        
-        retries--;
-        if (retries === 0) throw new Error('Erreur réseau: ' + resp.status);
-        
-        // If it failed, wait 1.5 seconds and try again silently
-        setMsg('Le serveur Google se réveille... (' + retries + ' essai(s) restant(s))');
-        await new Promise(resolve => setTimeout(resolve, 1500)); 
-    }
+    const resp=await fetch(URL_AS);
+    if(!resp.ok)throw new Error('Erreur réseau: '+resp.status);
 
     // If it succeeds before 60 seconds, we clear the timer so it doesn't trigger anyway
     // clearTimeout(timeoutId);
@@ -663,22 +651,42 @@ async function loadData(){
       const cmd=String(r[5]||'').trim();
       const nomComplet=String(r[1]||'').trim(); 
       if(!cmd||!nomComplet||cmd.startsWith('Dernière')||cmd.startsWith('Actualisation'))return;
-      if(!byCmd[cmd])byCmd[cmd]={cmd,fourn:String(r[4]||'').trim(),
-        livraison:fmtD(r[7]||''),date_cmd:'',lignes:[],total:0};
-      const qty=n(r[6]||1);
-      const nouvelleDate=String(r[9]||'').trim();
-      const com=nouvelleDate?fmtD(nouvelleDate):'';
       
-      // FIX: Variante is now r[2], ID is now r[3]
-      byCmd[cmd].lignes.push({
+      // 🚀 NEW: Robust Date Capture
+      const rawOriginal = String(r[7]||'').trim();
+      const rawNew = String(r[9]||'').trim();
+      
+      let finalDate = rawNew || rawOriginal;
+      let isIndet = !finalDate || finalDate.toLowerCase().includes('indeterminé') || finalDate.toLowerCase().includes('indéterminé');
+      
+      let livraisonFmt = isIndet ? 'Indéterminé' : fmtD(finalDate);
+      let livraisonOrigFmt = (rawNew && rawOriginal && rawNew !== rawOriginal && !rawOriginal.toLowerCase().includes('indeterminé')) ? fmtD(rawOriginal) : '';
+
+      // 🚀 NEW: Split POs into separate cards if they have different dates
+      const groupKey = cmd + '_' + livraisonFmt;
+
+      if(!byCmd[groupKey])byCmd[groupKey]={
+        cmd,
+        fourn:String(r[4]||'').trim(),
+        livraison: livraisonFmt,
+        livraison_originale: livraisonOrigFmt,
+        date_cmd:'',
+        lignes:[],
+        total:0
+      };
+      
+      const qty=n(r[6]||1);
+      const com = rawNew ? fmtD(rawNew) : '';
+      
+      byCmd[groupKey].lignes.push({
         nom: nomComplet,
         variante: String(r[2]||''),
         idVariante: String(r[3]||'').replace(/\D/g, ''), 
         qty,
-        livraison: fmtD(r[7]||''),
+        livraison: livraisonFmt,
         com
       });
-      byCmd[cmd].total+=qty;
+      byCmd[groupKey].total+=qty;
     });
     STOCKY=Object.values(byCmd).filter(c=>c.lignes.length>0).sort((a,b)=>b.cmd-a.cmd);
 
@@ -688,35 +696,50 @@ async function loadData(){
       const cmd=String(r[5]||'').trim();
       const nomComplet=String(r[1]||'').trim();
       if(!cmd||!nomComplet)return;
-      if(!byCmdT[cmd])byCmdT[cmd]={cmd,fourn:String(r[4]||'').trim(),
-      livraison:fmtD(String(r[7]||'').trim())||'—',date_cmd:'',lignes:[],total:0};      
+      
+      // 🚀 NEW: Robust Date Capture
+      const rawOriginal = String(r[7]||'').trim();
+      const rawNew = String(r[9]||'').trim();
+      
+      let finalDate = rawNew || rawOriginal;
+      let isIndet = !finalDate || finalDate.toLowerCase().includes('indeterminé') || finalDate.toLowerCase().includes('indéterminé');
+      
+      let livraisonFmt = isIndet ? 'Indéterminé' : fmtD(finalDate);
+      let livraisonOrigFmt = (rawNew && rawOriginal && rawNew !== rawOriginal && !rawOriginal.toLowerCase().includes('indeterminé')) ? fmtD(rawOriginal) : '';
+
+      // 🚀 NEW: Split Transfers into separate cards if they have different dates
+      const groupKey = cmd + '_' + livraisonFmt;
+
+      if(!byCmdT[groupKey])byCmdT[groupKey]={
+        cmd,
+        fourn:String(r[4]||'').trim(),
+        livraison: livraisonFmt,
+        livraison_originale: livraisonOrigFmt,
+        date_cmd:'',
+        lignes:[],
+        total:0
+      };      
+      
       const qty=n(r[6]||0);
-      const nouvelleDateT=String(r[9]||'').trim(); // Column J (Index 9)
-      const comT=nouvelleDateT?fmtD(nouvelleDateT):'';
+      const statusLigne = String(r[13]||'').trim(); 
+      const comT = rawNew ? fmtD(rawNew) : '';
       
-      // 🚀 The new date overwrites the master delivery date
-      if (nouvelleDateT) {
-          byCmdT[cmd].livraison = fmtD(nouvelleDateT);
-      }
-      
-      const statusLigne = String(r[13]||'').trim(); // 🚀 Extraction du statut (Column N = Index 13)
-      
-      // FIX: Variante is now r[2], ID is now r[3]
-      byCmdT[cmd].lignes.push({
+      byCmdT[groupKey].lignes.push({
         nom: nomComplet,
         titre: nomComplet,
         variante: String(r[2]||''),
         idVariante: String(r[3]||'').replace(/\D/g, ''), 
         sku: String(r[8]||'').trim(),
         qty,
-        livraison: byCmdT[cmd].livraison,
+        livraison: livraisonFmt,
         com: comT,
-        status: statusLigne // Injection du statut dans la mémoire
+        status: statusLigne 
       });      
-      byCmdT[cmd].total+=qty;
+      byCmdT[groupKey].total+=qty;
     });
     TRANSFERTS=Object.values(byCmdT).filter(c=>c.lignes.length>0).sort((a,b)=>b.cmd.localeCompare(a.cmd));
-    
+
+
     // Reconstruction de PO_ENVOYES 
     {
       const combinedNomToId={}, skuToId={};
@@ -800,11 +823,15 @@ async function loadData(){
     }));
 
     // Promos
-    PROMOS=pT(raw['Promos']||[]).filter(r=>r['Produit']&&(r['Date Début']||r['Date Fin'])).map(r=>{
+    // Promos
+    PROMOS=pT(raw['Promos']||[]).filter(r=>(r['Produit']||r['SKU']||r['Sku'])&&(r['Date Début']||r['Date Fin'])).map(r=>{
       const boost=n(String(r['Boost%']||'0').replace('%',''));
       const prixPromo=n(r['Prix promo']||r['Prix Promo']||r['Prix régulier promo']||0);
       const variante=String(r['Variante Shopify']||'').trim();
-      return{produit:String(r['Produit']||''),marque:String(r['Marque']||''),
+      const sku=String(r['SKU']||r['Sku']||'').trim(); // 🚀 Capture SKU
+      const produit=String(r['Produit']||'').trim();   // 🚀 Capture Nom
+      
+      return{produit,sku,marque:String(r['Marque']||''),
         dd:fmtD(r['Date Début']),df:fmtD(r['Date Fin']),
         sd:n(r['Sem. Début (ISO)']),sf:n(r['Sem. Fin (ISO)']),
         boost,prixPromo,variante};
@@ -889,8 +916,13 @@ function populateFiltres(){
   for(let i=Math.max(1,W-4);i<=Math.min(52,W+12);i++)
     swOpts.push(`<option value="${i}"${i===W?' selected':''}>S${String(i).padStart(2,'0')}${i===W?' (courante)':''}</option>`);
 
+  // 🚀 Change le comportement par défaut pour désélectionner la semaine courante
   const swr=document.getElementById('sw-r');
-  if(swr)swr.innerHTML='<option value="">Toutes semaines</option>'+swOpts.join('');
+  if(swr) {
+      swr.innerHTML='<option value="" selected>Toutes semaines</option>' + 
+                    swOpts.join('').replace(' selected', '') + 
+                    '<option value="indetermine">Indéterminé</option>'; // 🚀 NOUVELLE OPTION
+  }
 
   const ddlSwpo = document.getElementById('ddl-swpo');
   if(ddlSwpo && !ddlSwpo.childElementCount){
@@ -996,7 +1028,10 @@ function sortProds(arr,col,dir){
 
     // Special rule: Ensure Pareto sorts correctly (A is better than B, B is better than C)
     if(col==='pareto'||col==='cat'){const o={A:0,B:1,C:2};va=o[va]??3;vb=o[vb]??3;}
-    else if(typeof va==='string')va=va.toLowerCase(),vb=vb.toLowerCase();
+    // 🚀 NEW: Intelligent French Locale Sorting (Ignores accents, caps, and handles numbers)
+    else if(typeof va === 'string' && typeof vb === 'string') {
+        return va.localeCompare(vb, 'fr', { numeric: true, sensitivity: 'base' }) * dir;
+    }
     return va<vb?-dir:va>vb?dir:0;
   });
 }
@@ -1094,11 +1129,17 @@ function rAlertes(){
   document.getElementById('rc-a').textContent=rows.length+' produit(s)';
 
   // DRAW THE TABLE: Generate the HTML for every single row and insert it into the page
-  // DRAW THE TABLE: Generate the HTML for every single row and insert it into the page
+  const W = cw();
   document.getElementById('tb-a').innerHTML=rows.map(p=>{
     const cleanNom = (p.variante && p.nom.endsWith(' - ' + p.variante)) ? p.nom.slice(0, -(p.variante.length + 3)) : p.nom;
+    
+    // 🚀 NEW: Promo Check & SKU Search Link
+    const enPromo = PROMOS.some(pr => (pr.sku === p.skuFourn || normKey(pr.produit) === normKey(p.nom) || normKey(pr.produit) === normKey(p.nb)) && pr.sd <= W && pr.sf >= W);
+    const searchKey = p.skuFourn ? p.skuFourn.replace(/'/g,"\\\\'") : p.nom.replace(/'/g,"\\\\'");
+    const promoBadge = enPromo ? `<span class="promo-link" title="Voir la promotion" onclick="allerAuxPromos('${searchKey}')">⭐ Promo</span>` : '';
+
     return `<tr>
-    <td><div class="pn">${cleanNom}</div>${p.variante?`<div class="pv">${p.variante}</div>`:''}</td>
+    <td><div class="pn">${cleanNom}${promoBadge}</div>${p.variante?`<div class="pv">${p.variante}</div>`:''}</td>
     <td style="white-space:nowrap;font-size:12px">${p.fourn||'—'}</td>
     <td>${bP(p.pareto)}</td>
     <td style="text-align:right"><span class="${sc(p.stock)}">${fmt(p.stock)}</span></td>
@@ -1134,10 +1175,17 @@ function rStocks(){
   rows=sortProds(rows,SORTS.s.col,SORTS.s.dir);
   document.getElementById('rc-s').textContent=rows.length+' produit(s)';
 
+const W = cw();
   document.getElementById('tb-s').innerHTML=rows.map(p=>{
     const cleanNom = (p.variante && p.nom.endsWith(' - ' + p.variante)) ? p.nom.slice(0, -(p.variante.length + 3)) : p.nom;
+    
+    // 🚀 NEW: Promo Check & SKU Search Link
+    const enPromo = PROMOS.some(pr => (pr.sku === p.skuFourn || normKey(pr.produit) === normKey(p.nom) || normKey(pr.produit) === normKey(p.nb)) && pr.sd <= W && pr.sf >= W);
+    const searchKey = p.skuFourn ? p.skuFourn.replace(/'/g,"\\\\'") : p.nom.replace(/'/g,"\\\\'");
+    const promoBadge = enPromo ? `<span class="promo-link" title="Voir la promotion" onclick="allerAuxPromos('${searchKey}')">⭐ Promo</span>` : '';
+
     return `<tr>
-    <td><div class="pn">${cleanNom}</div>${p.variante?`<div class="pv">${p.variante}</div>`:''}</td>
+    <td><div class="pn">${cleanNom}${promoBadge}</div>${p.variante?`<div class="pv">${p.variante}</div>`:''}</td>
     <td style="white-space:nowrap;font-size:12px">${p.fourn||'—'}</td>
     <td>${bP(p.pareto)}</td>
     <td style="text-align:right"><span class="${sc(p.stock)}">${fmt(p.stock)}</span></td>
@@ -1209,17 +1257,26 @@ function rFourn(){
             </tr>
           </thead>
           <tbody>
-            ${sorted.map(p=>{
-                const cleanNom = (p.variante && p.nom.endsWith(' - ' + p.variante)) ? p.nom.slice(0, -(p.variante.length + 3)) : p.nom;
-                return `<tr>
-                <td><div class="pn">${cleanNom}</div>${p.variante?`<div class="pv">${p.variante}</div>`:''}</td>
-                <td>${bP(p.pareto)}</td>
-                <td style="text-align:right"><span class="${sc(p.stock)}">${fmt(p.stock)}</span></td>
-                <td>${bS(p.statut,p.statut_produit)}</td>
-                <td style="text-align:right">${p.en_cmd > 0 ? `<span class="cmd-link" onclick="allerAuxReceptions('${p.nom.replace(/'/g,"\\\\'")}')">${fmt(p.en_cmd)}</span>` : '—'}</td>
-                <td style="text-align:right">${fmt(p.fc_m05)}</td>
-            </tr>`;
-            }).join('')}
+            ${(()=>{ 
+                const W = cw(); 
+                return sorted.map(p=>{
+                    const cleanNom = (p.variante && p.nom.endsWith(' - ' + p.variante)) ? p.nom.slice(0, -(p.variante.length + 3)) : p.nom;
+                    
+                    // 🚀 NEW: Promo Check & SKU Search Link
+                    const enPromo = PROMOS.some(pr => (pr.sku === p.skuFourn || normKey(pr.produit) === normKey(p.nom) || normKey(pr.produit) === normKey(p.nb)) && pr.sd <= W && pr.sf >= W);
+                    const searchKey = p.skuFourn ? p.skuFourn.replace(/'/g,"\\\\'") : p.nom.replace(/'/g,"\\\\'");
+                    const promoBadge = enPromo ? `<span class="promo-link" title="Voir la promotion" onclick="allerAuxPromos('${searchKey}')">⭐ Promo</span>` : '';
+
+                    return `<tr>
+                    <td><div class="pn">${cleanNom}${promoBadge}</div>${p.variante?`<div class="pv">${p.variante}</div>`:''}</td>
+                    <td>${bP(p.pareto)}</td>
+                    <td style="text-align:right"><span class="${sc(p.stock)}">${fmt(p.stock)}</span></td>
+                    <td>${bS(p.statut,p.statut_produit)}</td>
+                    <td style="text-align:right">${p.en_cmd > 0 ? `<span class="cmd-link" onclick="allerAuxReceptions('${p.nom.replace(/'/g,"\\\\'")}')">${fmt(p.en_cmd)}</span>` : '—'}</td>
+                    <td style="text-align:right">${fmt(p.fc_m05)}</td>
+                </tr>`;
+                }).join(''); 
+            })()}
           </tbody>
         </table></div>`;
 }
@@ -1301,65 +1358,201 @@ function rReceptions(){
 
   // Helper function to filter by target delivery week
   function matchSemaine(c) {
-    if (!sw) return true;
-    if (!c.livraison || c.livraison === '—') return true; // Don't hide orders without a date
-    try {
-      let d;
-      // Robust Date Parsing (DD/MM/YY -> YYYY-MM-DD)
-      if (c.livraison.includes('/')) {
-        const parts = c.livraison.split('/');
-        d = new Date(parseInt(parts[2]) + 2000, parseInt(parts[1]) - 1, parseInt(parts[0]));
-      } else {
-        d = new Date(c.livraison);
-      }
-      
-      const s = new Date(d.getFullYear(), 0, 1);
-      const cmdSw = Math.ceil(((d - s) / 86400000 + s.getDay() + 1) / 7);
-      return cmdSw === parseInt(sw);
-    } catch(e) { 
-      return true; 
+    if (!sw) return true; // "Toutes semaines" always shows everything
+
+    const liv = c.livraison || '';
+    const isIndetStrict = liv === '—' || liv === 'Indéterminé';
+
+    // 🚀 NEW: Le Dictionnaire des Mois (Fuzzy Matching Engine)
+    const cleanLiv = liv.normalize("NFD").replace(/[\u0300-\u036f]/g, "").toLowerCase();
+    
+    // JS compte de 0 à 11 (Janvier = 0, Décembre = 11)
+    const moisDict = {
+        'janvier': 0, 'janv': 0,
+        'fevrier': 1, 'fevr': 1,
+        'mars': 2,
+        'avril': 3, 'avr': 3,
+        'mai': 4,
+        'juin': 5,
+        'juillet': 6, 'juil': 6,
+        'aout': 7, 
+        'septembre': 8, 'sept': 8,
+        'octobre': 9, 'oct': 9,
+        'novembre': 10, 'nov': 10,
+        'decembre': 11, 'dec': 11
+    };
+    
+    let moisTrouve = -1;
+    for (const [nomMois, indexMois] of Object.entries(moisDict)) {
+        if (cleanLiv.includes(nomMois)) {
+            moisTrouve = indexMois;
+            break; 
+        }
     }
+
+    let isUncalculableText = false;
+    let d;
+    try {
+        if (liv.includes('/')) {
+            const parts = liv.split('/');
+            d = new Date(parseInt(parts[2]) + 2000, parseInt(parts[1]) - 1, parseInt(parts[0]));
+        } else {
+            d = new Date(liv);
+        }
+        if (isNaN(d.getTime())) isUncalculableText = true;
+    } catch(e) {
+        isUncalculableText = true;
+    }
+
+    if (moisTrouve !== -1) {
+        isUncalculableText = false;
+    }
+
+    if (sw === 'indetermine') {
+        return isIndetStrict || isUncalculableText;
+    }
+    
+    if (isIndetStrict || isUncalculableText) return false;
+
+    const selectedWeek = parseInt(sw);
+    if (moisTrouve !== -1) {
+        // Find which month the selected week belongs to
+        const selectedMonth = getMonthFromCompanyWeek(selectedWeek, new Date().getFullYear());
+        return selectedMonth === moisTrouve;
+    }
+
+    const s = new Date(d.getFullYear(), 0, 1);
+    const cmdSw = Math.ceil(((d - s) / 86400000 + s.getDay() + 1) / 7);
+    return cmdSw === selectedWeek;
+  }
+
+  const showHistory = document.getElementById('cb-history-r')?.checked;
+
+  // 🚀 NEW: Dynamic PO reconstruction based on line statuses AND Color System
+  function filtrerCommandes(liste) {
+    return liste.map(c => {
+        // Step A: Evaluer le statut global du PO AVANT de filtrer
+        const allLines = c.lignes;
+        const isAllCancelled = allLines.length > 0 && allLines.every(l => l.status === 'Annulé');
+        const isAllCompleted = allLines.length > 0 && allLines.every(l => l.status === 'Reçu' || l.status === 'Annulé') && !isAllCancelled;
+        const hasReceived = allLines.some(l => l.status === 'Reçu' || (l.status && l.status.toLowerCase().includes('partiel')));
+        const isPartiallyReceived = hasReceived && !isAllCompleted && !isAllCancelled;
+
+        // Evaluer si la commande est en retard
+        let isLate = false;
+        if (!isAllCompleted && !isAllCancelled && c.livraison && c.livraison !== '—' && c.livraison !== 'Indéterminé') {
+            const parts = c.livraison.split('/');
+            
+            // Règle A: Format de date standard (ex: 15/08/26)
+            if (parts.length === 3) {
+                const d = new Date(parseInt(parts[2]) + 2000, parseInt(parts[1]) - 1, parseInt(parts[0]));
+                const today = new Date();
+                today.setHours(0,0,0,0);
+                if (d < today) isLate = true;
+            } 
+            // Règle B: Date textuelle (ex: "Mi-juillet" ou "Mi-juillet 2027")
+            else {
+                const cleanLiv = c.livraison.normalize("NFD").replace(/[\u0300-\u036f]/g, "").toLowerCase();
+                const moisDict = {
+                    'janvier': 0, 'janv': 0, 'fevrier': 1, 'fevr': 1, 'mars': 2, 'avril': 3, 'avr': 3,
+                    'mai': 4, 'juin': 5, 'juillet': 6, 'juil': 6, 'aout': 7, 'septembre': 8, 'sept': 8,
+                    'octobre': 9, 'oct': 9, 'novembre': 10, 'nov': 10, 'decembre': 11, 'dec': 11
+                };
+                
+                let moisTrouve = -1;
+                for (const [nomMois, indexMois] of Object.entries(moisDict)) {
+                    if (cleanLiv.includes(nomMois)) {
+                        moisTrouve = indexMois;
+                        break; 
+                    }
+                }
+                
+                if (moisTrouve !== -1) {
+                    const today = new Date();
+                    const currentYear = today.getFullYear();
+                    const currentMonth = today.getMonth();
+                    
+                    // 🚀 NOUVEAU : Scanner l'année dans le texte (extrait "2027" de "Mi-septembre 2027")
+                    const yearMatch = cleanLiv.match(/20\d{2}/);
+                    const targetYear = yearMatch ? parseInt(yearMatch[0]) : currentYear;
+                    
+                    // Calcul intelligent du retard incluant l'année cible
+                    if (targetYear < currentYear) {
+                        isLate = true; // L'année prévue est dans le passé
+                    } else if (targetYear === currentYear && moisTrouve < currentMonth) {
+                        isLate = true; // Même année, mais le mois est dépassé
+                    }
+                    // Si targetYear > currentYear, la commande n'est mathématiquement pas en retard !
+                }
+            }
+        }
+
+        // Assigner la classe CSS correspondante
+        let globalStatusClass = '';
+        if (isAllCancelled) globalStatusClass = 'rg-cancelled';
+        else if (isAllCompleted) globalStatusClass = 'rg-received';
+        else if (isPartiallyReceived) globalStatusClass = 'rg-partiel';
+        else if (isLate) globalStatusClass = 'rg-late';
+
+        // Step B: Filter out completed lines if history is toggled off
+        const lignesValides = c.lignes.filter(l => {
+            if (!showHistory && (l.status === 'Reçu' || l.status === 'Annulé')) return false;
+            if (srch && !l.nom.toLowerCase().includes(srch)) return false;
+            return true;
+        });
+        
+        // Step C: Recalculate the PO's total units using only the visible lines
+        const nouveauTotal = lignesValides.reduce((sum, l) => sum + (l.qty || 0), 0);
+        
+        return { ...c, lignes: lignesValides, total: nouveauTotal, _statusClass: globalStatusClass, _isHistorical: isAllCompleted || isAllCancelled };
+    }).filter(c => {
+        // Step D: Drop the entire PO if all its lines were filtered out
+        if (c.lignes.length === 0) return false; 
+        if (!equipeMatch(c.fourn)) return false;
+        if (fourn && c.fourn !== fourn) return false;
+        return matchSemaine(c);
+    });
   }
 
   // 1. Filter the Stocky Orders
-  const sf=STOCKY.filter(c=>{
-    if(!equipeMatch(c.fourn))return false;
-    if(fourn&&c.fourn!==fourn)return false;
-    if(srch&&!c.lignes.some(l=>l.nom.toLowerCase().includes(srch)))return false;
-    return matchSemaine(c);
-  });
+  const sf = filtrerCommandes(STOCKY);
 
   // 2. Filter the Transferts Orders
-  const tf=TRANSFERTS.filter(c=>{
-    if(!equipeMatch(c.fourn))return false;
-    if(fourn&&c.fourn!==fourn)return false;
-    if(srch&&!c.lignes.some(l=>l.nom.toLowerCase().includes(srch)))return false;
-    return matchSemaine(c);
-  });
+  const tf = filtrerCommandes(TRANSFERTS);
 
   // 3. Update the total order count at the top of the screen
   document.getElementById('rc-r2').textContent=(sf.length+tf.length)+' commande(s)';
 
   // 4. Helper function to generate the HTML for a specific group of orders
+  // 4. Helper function to generate the HTML for a specific group of orders
   function renderGroupe(list, titre, prefix){
     if(!list.length)return '';
     let h=`<div class="sh"><span class="st">${titre} (${list.length})</span></div>`;
     h+=list.map((c,i)=>{
-      const shouldOpen=srch.length>0;
-      const openCls=shouldOpen?'open':'';
-      const arrow=shouldOpen?'▲':'▼';
+      // 🚀 NEW: Auto-collapse if historical, even during searches
+      const shouldOpen = srch.length > 0 && !c._isHistorical;
+      const openCls = shouldOpen ? 'open' : '';
+      const arrow = shouldOpen ? '▲' : '▼';
+      
+      // 🚀 NEW: Clean up the # symbol and dynamically name it
+      const cleanCmd = String(c.cmd).replace(/^#/, '');
+      const typeLabel = prefix === 'S' ? 'PO' : 'Transfert';
+      
+      // 🚀 NEW: Add old date styling if it exists
+      const oldDateHtml = c.livraison_originale ? `<span style="text-decoration:line-through; opacity:0.6; margin-left:5px; font-size:10px;">(${c.livraison_originale})</span>` : '';
+
       return`
-      <div class="rg">
+      <div class="rg ${c._statusClass || ''}">
         <div class="rh" onclick="toggleRec('rb${prefix}${i}','arr${prefix}${i}')">
-          <span class="rh-cmd">PO #${c.cmd}</span>
+          <span class="rh-cmd">${typeLabel} #${cleanCmd}</span>
           <span class="rh-f">${c.fourn}</span>
-          <span class="rh-d">📅 ${c.livraison}</span>
+          <span class="rh-d">📅 ${c.livraison}${oldDateHtml}</span>
           <span class="rh-cnt">${c.lignes.length} produit(s) · ${fmt(c.total)} unités <span id="arr${prefix}${i}">${arrow}</span></span>
         </div>
         <div class="rb ${openCls}" id="rb${prefix}${i}">
           <table style="width:100%">
             <thead><tr><th>Produit</th><th>Variante</th><th style="text-align:right">Qté</th></tr></thead>
-            <tbody>${c.lignes.filter(l=>!srch||l.nom.toLowerCase().includes(srch)).map(l=>{
+            <tbody>${c.lignes.map(l=>{
               const vStr = l.variante && l.variante !== 'Default Title' ? l.variante : '';
               const cleanNom = (vStr && l.nom.endsWith(' - ' + vStr)) ? l.nom.slice(0, -(vStr.length + 3)) : l.nom;
               return `<tr>
@@ -1790,6 +1983,7 @@ function rPO(){
       prodsNonCommandes.forEach(r => {
           const p = PRODS.find(x => x.nom === r.nom);
           r._stock = p ? p.stock : 0;
+          r._enCmd = p ? p.en_cmd : 0; // 🚀 NEW: Captures active transfers for sorting
           r._qtySel = qtySel(r);
           r._montant = r._qtySel * (r.prix || 0);
       });
@@ -1824,7 +2018,7 @@ function rPO(){
               <th style="text-align:right" onclick="srt('po','_stock',this)">Stock actuel</th>
               <th onclick="srt('po','delai',this)">Délai</th>
               ${wks.map(i=>`<th style="text-align:center">S${String(i).padStart(2,'0')}${semaines.includes(i)?' ✎':''}</th>`).join('')}
-              <th style="text-align:right" onclick="srt('po','_qtySel',this)">Total cmd</th>
+              <th style="text-align:right" onclick="srt('po','_enCmd',this)">En commande</th>
               <th style="text-align:center">Sem. couvertes</th>
               <th style="text-align:right" onclick="srt('po','prix',this)">Coût unit.</th>
               <th style="text-align:right" onclick="srt('po','_montant',this)">Montant</th>
@@ -1888,8 +2082,24 @@ function rPO(){
                 return v>0?`<td style="text-align:center;background:var(--amb);color:var(--am);font-weight:600;font-size:12px;padding:8px 10px">${fmt(v)}</td>`:
                            `<td style="text-align:center;color:var(--t3)">—</td>`;
               }).join('')}
-              <td style="text-align:right;font-weight:500">${r.tc>0?fmt(r.tc):'—'}</td>
-              <td style="text-align:center">${(()=>{const qty=qtySel(r);const vm=r.vm||0;const p=PRODS.find(x=>x.nom===r.nom);const stockAct=p?p.stock:0;const enCmd=p?(p.en_cmd||0):0;if(qty>0&&vm>0){const wksCov=Math.round((stockAct+enCmd+qty)/vm);const ok=wksCov>=(r.delai||0);return `<span style="font-weight:600;color:${ok?'var(--gr)':'var(--re)'}">${wksCov} sem.</span>`;}return '<span style="color:var(--t3)">—</span>';})()}</td>
+              <td style="text-align:right;font-weight:500">${(()=>{const p=PRODS.find(x=>x.nom===r.nom); return (p&&p.en_cmd>0)?`<span class="cmd-link" title="Voir les transferts" onclick="allerAuxReceptions('${p.nom.replace(/'/g,"\\\\'")}')">${fmt(p.en_cmd)}</span>`:'—';})()}</td>
+              <td style="text-align:center">${(()=>{
+    const qty=qtySel(r);
+    const p=PRODS.find(x=>x.nom===r.nom);
+    const stockAct=p?p.stock:0;
+    const enCmd=p?(p.en_cmd||0):0;
+    
+    // 🚀 NEW: Prioritize Forecast Demand over Historical Sales
+    const forecastMensuel = p ? p.fc_m05 : 0;
+    const weeklyDemand = forecastMensuel > 0 ? (forecastMensuel / 4.33) : (r.vm || 0);
+
+    if(qty>0 && weeklyDemand>0){
+        const wksCov=Math.round((stockAct+enCmd+qty)/weeklyDemand);
+        const ok=wksCov>=(r.delai||0);
+        return `<span style="font-weight:600;color:${ok?'var(--gr)':'var(--re)'}">${wksCov} sem.</span>`;
+    }
+    return '<span style="color:var(--t3)">—</span>';
+})()}</td>
               <td style="text-align:right"><input type="number" min="0" step="0.01" value="${r.prix>0?r.prix.toFixed(2):''}" placeholder="—" style="width:75px;padding:2px 4px;border:1px solid var(--b2);border-radius:4px;font-size:12px;text-align:right;color:var(--t2)" onchange="majPrixPO('${fournSafe}','${nomSafe}',this.value)"></td>
               <td style="text-align:right;font-weight:500;color:var(--br)">${r.prix>0?fmtM(qtySel(r)*r.prix):'—'}</td>
             </tr>`;}).join('')}</tbody>
@@ -2008,26 +2218,31 @@ function setPF(f,el){
   PF=f; // Updates the memory sticky note to track "All", "Active", or "Past" promos
   document.querySelectorAll('#v-promos .fb').forEach(b=>b.classList.remove('on'));
   el.classList.add('on');
+
+  // 🚀 NEW: Automatically reset the week dropdown to "Toutes semaines" when clicking "À venir"
+  if (f === 'coming') {
+      const swpr = document.getElementById('sw-pr');
+      if (swpr) swpr.value = '';
+  }
+
   rPromos();
 }
 
 function rPromos(){
+  const srch=(document.getElementById('s-pr')?.value||'').toLowerCase(); // 🚀 FIXED: Search bar integration
   const marque=document.getElementById('f-pr')?.value||'';
   const sw=parseInt(document.getElementById('sw-pr')?.value||'0')||0;
   const W=cw();
   
   const rows=PROMOS.filter(r=>{
-    if(marque&&r.marque!==marque) 
-      return false;
-    if(sw>0&&!(r.sd<=sw&&r.sf>=sw)) 
-      return false;
-    // Categorize by time period
-    if(PF==='active'&&!(r.sd<=W&&r.sf>=W)) 
-      return false;
-    if(PF==='coming'&&r.sd<=W) 
-      return false;
-    if(PF==='past'&&r.sf>=W) 
-      return false;
+    if(marque&&r.marque!==marque) return false;
+    if(sw>0&&!(r.sd<=sw&&r.sf>=sw)) return false;
+    if(PF==='active'&&!(r.sd<=W&&r.sf>=W)) return false;
+    if(PF==='coming'&&r.sd<=W) return false;
+    if(PF==='past'&&r.sf>=W) return false;
+    
+    // 🚀 NEW: Search by Name or SKU
+    if(srch && !r.produit.toLowerCase().includes(srch) && !(r.sku||'').toLowerCase().includes(srch)) return false;
     return true;
   });
   
@@ -2037,23 +2252,28 @@ function rPromos(){
     const isC=r.sd>W;
     const badge=isA?`<span class="bx bgr">Active</span>`:isC?`<span class="bx bbl">À venir</span>`:`<span class="bx bgy">Passée</span>`;
     
-    // Format the Promo Price
-    const prixHtml=r.prixPromo>0
-      ?`<strong style="color:var(--br)">${r.prixPromo.toLocaleString('fr-CA',{minimumFractionDigits:2,maximumFractionDigits:2})} $</strong>`
-      :'—';
+    const prixHtml=r.prixPromo>0 ?`<strong style="color:var(--br)">${r.prixPromo.toLocaleString('fr-CA',{minimumFractionDigits:2,maximumFractionDigits:2})} $</strong>` :'—';
 
-    // Find the variant name from either the Master Inventory or the Promo Sheet fallback
-    let varActuelle = '';
-    const varHtml = (() => {
-        const p = PRODS.find(x => x.nom === r.produit || x.nb === r.produit);
-        varActuelle = (p && p.variante) ? p.variante : r.variante;
-        return varActuelle ? `<div class="pv">${varActuelle}</div>` : '';
-    })();
+    // 🚀 NEW: Dual Column Logic (Finds true name + true SKU)
+    let vraiNom = r.produit;
+    let vraiSku = r.sku || '—';
+    let varActuelle = r.variante;
     
-    const cleanNom = (varActuelle && r.produit.endsWith(' - ' + varActuelle)) ? r.produit.slice(0, -(varActuelle.length + 3)) : r.produit;
+    const p = PRODS.find(x => (r.sku && x.skuFourn === r.sku) || normKey(x.nom) === normKey(r.produit) || normKey(x.nb) === normKey(r.produit));
+    
+    if (p) {
+        vraiNom = p.nom;
+        vraiSku = p.skuFourn || r.sku || '—';
+        varActuelle = p.variante || r.variante;
+    }
+    
+    const cleanNom = (varActuelle && vraiNom.endsWith(' - ' + varActuelle)) ? vraiNom.slice(0, -(varActuelle.length + 3)) : vraiNom;
+    const varHtml = varActuelle ? `<div class="pv">${varActuelle}</div>` : '';
 
+    // Notice the new <td> element for SKU below
     return`<tr>
       <td><div class="pn">${cleanNom}</div>${varHtml}</td>
+      <td style="font-size:12px;color:var(--t3)">${vraiSku}</td> 
       <td style="white-space:nowrap">${r.marque}</td>
       <td>${badge}</td>
       <td style="white-space:nowrap;font-size:12px">S${String(r.sd).padStart(2,'0')}–S${String(r.sf).padStart(2,'0')}</td>
@@ -2062,7 +2282,7 @@ function rPromos(){
       <td style="text-align:right;font-weight:600;color:${r.boost>=30?'var(--gr)':r.boost>=15?'var(--am)':'var(--t1)'}">${r.boost>0?r.boost+'%':'—'}</td>
       <td style="text-align:right">${prixHtml}</td>
     </tr>`;
-  }).join('')||'<tr><td colspan="8" style="text-align:center;padding:40px;color:var(--t3)">Aucune promo</td></tr>';
+  }).join('')||'<tr><td colspan="9" style="text-align:center;padding:40px;color:var(--t3)">Aucune promo</td></tr>';
 }
 
 // -----------------------------------------------------------------
@@ -2177,6 +2397,7 @@ function rDormant() {
     // Fetch User Inputs & Multi-Select Filters
     const thresholdWeeks = parseInt(document.getElementById('d-weeks').value) || 8;
     const selectedFourns = gC('fdormant'); 
+    const srch = (document.getElementById('s-d')?.value || '').toLowerCase(); // 🚀 NEW: Grab search input
     const CW = cw(); 
 
     // Retrieve sorting preferences from the global SORTS object
@@ -2220,6 +2441,11 @@ function rDormant() {
         // Strict Filter 2: Multi-Select Supplier
         if (selectedFourns.length > 0 && !selectedFourns.includes(p.fourn)) 
           return;
+
+        // Text Search (Filters by Name or SKU)
+        if (srch && !p.nom.toLowerCase().includes(srch) && !(p.skuFourn || '').toLowerCase().includes(srch)) {
+            return;
+        }
 
         let weeksWithoutSale = 0;
         let lastSoldLabel = "Jamais Vendu";
@@ -2282,12 +2508,13 @@ function rDormant() {
             valA = rankMap[a.product.pareto] ?? 3;
             valB = rankMap[b.product.pareto] ?? 3;
         } 
-        else if (sortBy === 'nom') { valA = a.product.nom.toLowerCase(); valB = b.product.nom.toLowerCase(); }
-        else if (sortBy === 'fourn') { valA = (a.product.fourn||'').toLowerCase(); valB = (b.product.fourn||'').toLowerCase(); }
+        // 🚀 NEW: Do not use .toLowerCase() here, let localeCompare handle it natively
+        else if (sortBy === 'nom') { valA = a.product.nom; valB = b.product.nom; }
+        else if (sortBy === 'fourn') { valA = a.product.fourn || ''; valB = b.product.fourn || ''; }
 
-        // Alphabetical sort calculation
-        if (typeof valA === 'string') {
-            return valA < valB ? -sortDir : (valA > valB ? sortDir : 0);
+        // 🚀 NEW: Intelligent French Locale Sorting
+        if (typeof valA === 'string' && typeof valB === 'string') {
+            return valA.localeCompare(valB, 'fr', { numeric: true, sensitivity: 'base' }) * sortDir;
         }
         // Numerical sort calculation
         return (valA - valB) * sortDir; 
@@ -3670,7 +3897,7 @@ function fermerModalSansEquipe() {
 // ==========================================================
 function allerAuxReceptions(nomProduit) {
     // 1. Appuyer sur l'onglet Réceptions dans le menu de gauche
-    const btnReceptions = document.querySelectorAll('.ni')[7]; 
+    const btnReceptions = document.querySelectorAll('.ni')[5]; 
     if (btnReceptions) nav('receptions', btnReceptions);
 
     // 2. Coller le nom du produit dans la barre de recherche
@@ -3679,11 +3906,38 @@ function allerAuxReceptions(nomProduit) {
         // Enlève la variante s'il y en a une pour une recherche plus large
         const nomPropre = nomProduit.split(' - ')[0]; 
         searchBar.value = nomPropre;
+
+        // 🚀 NOUVEAU : Forcer le menu déroulant sur "Toutes semaines"
+        const weekFilter = document.getElementById('sw-r');
+        if (weekFilter) weekFilter.value = '';
         
         // 3. Déclencher le filtre
         rReceptions();
     }
 }
+
+// ==========================================================
+// NAVIGATION RAPIDE : ALLER AUX PROMOS
+// ==========================================================
+function allerAuxPromos(searchKey) {
+    // 1. Appuyer sur l'onglet Promos dans le menu de gauche (Index 8)
+    const btnPromos = document.querySelectorAll('.ni')[8]; 
+    if (btnPromos) nav('promos', btnPromos);
+
+    // 2. Forcer le filtre "En cours"
+    const btnEnCours = document.querySelectorAll('#v-promos .fb')[1]; 
+    if (btnEnCours) setPF('active', btnEnCours);
+
+    // 3. Coller le SKU (ou le nom) dans la barre de recherche
+    const searchBar = document.getElementById('s-pr');
+    if (searchBar) {
+        // Enlève la variante s'il y en a une pour une recherche plus large
+        const cleanKey = searchKey.split(' - ')[0]; 
+        searchBar.value = cleanKey;
+        rPromos();
+    }
+}
+
 
 // IGNITION: Starts the entire process when the file is loaded
 loadData();
