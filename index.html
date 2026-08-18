@@ -117,8 +117,8 @@
           <th onclick="srt('s','fourn',this)">Fournisseur</th>
           <th onclick="srt('s','pareto',this)">Pareto</th>
           <th onclick="srt('s','stock',this)" style="text-align:right">Stock</th>
-          <th onclick="srt('s','wks_left',this)" style="text-align:right">Sem. rest.</th>
           <th onclick="srt('s','statut',this)">Statut</th>
+          <th onclick="srt('s','wks_left',this)" style="text-align:right">Sem. rest.</th>
           <th style="text-align:right">En commande</th>
           <th style="text-align:right" id="th-fc-s">Forecast M06</th>
           <th style="text-align:right">Solde</th>
@@ -360,6 +360,11 @@
     <div id="v-mapping" class="view">
       <div class="sh"><span class="st">Mapping des IDs (Correction Ventes N-1)</span><span class="rc" id="rc-map"></span></div>
       
+      <!-- 🚀 NOUVEAU: Barre de recherche -->
+      <div class="fl" style="margin-bottom: 16px;">
+        <input class="fin" id="s-map" placeholder="Rechercher un ID ou produit..." oninput="rMapping()" style="width: 250px;">
+      </div>
+
       <div style="background:var(--w);border:1px solid var(--b1);border-radius:10px;padding:16px;margin-bottom:16px;">
         <div style="font-size:12px;font-weight:600;margin-bottom:10px;color:var(--t2);">Lier un ancien ID orphelin à un nouvel ID Shopify</div>
         <div style="display:flex;gap:10px;align-items:center;flex-wrap:wrap;">
