@@ -105,7 +105,6 @@ let PO_TOGGLE_STATE={};
 let SORTS={
   a:{col:'stock',dir:1},
   s:{col:'stock',dir:1},
-  f:{col:'pareto',dir:1},
   v:{col:'vt',dir:-1},
   fc:{col:'nom',dir:1},
   pr:{col:'nom',dir:1},
@@ -170,7 +169,10 @@ function createKey(name, variant) {
 function equipeMatch(fourn){
   if(!EQUIPE_FILTER)
     return true;
-  const eq=(VENDOR_MAP[fourn]||'').toLowerCase();
+  
+  // 🚀 NEW: Strip the Mirage tag so Nina/Clovis routing still works perfectly
+  const cleanFourn = (fourn || '').replace(' (Café)', '').trim();
+  const eq=(VENDOR_MAP[cleanFourn]||'').toLowerCase();
   return eq.includes(EQUIPE_FILTER);
 }
 
@@ -180,11 +182,6 @@ function setEquipe(eq,el){
   EQUIPE_FILTER=eq;
   document.querySelectorAll('.eq-btn').forEach(b=>b.classList.remove('on'));
   el.classList.add('on');
-  const sf=document.getElementById('s-f');
-  if(sf){
-    const fournsFiltered=FOURNISSEURS.filter(f=>equipeMatch(f));
-    sf.innerHTML='<option value="">Choisir un fournisseur…</option>'+fournsFiltered.map(f=>`<option>${f}</option>`).join('');
-  }
   renderView(CV);
 }
 
@@ -593,7 +590,15 @@ async function loadData(){
       const stock=n(r[7]);
       const statR=String(r[9]||'').toLowerCase().trim();
       if(statR==='draft'||statR==='archived')return; 
-      const fourn=String(r[8]||'').trim();
+      // 🚀 NEW: Read Column S (Index 18) for the Product Type to create the Mirage Supplier
+      const fournOriginal = String(r[8]||'').trim();
+      const typeProduit = String(r[18]||'').toLowerCase().trim();
+      
+      let fourn = fournOriginal;
+      if (typeProduit.includes('coffee') || typeProduit.includes('café') || typeProduit.includes('cafe')) {
+          fourn = fournOriginal + ' (Café)';
+      }
+      
       const variante=String(r[3]||'').trim();
       const en_cmd=n(r[13]||0);
       const pc=String(r[15]||'').trim();
@@ -636,6 +641,12 @@ async function loadData(){
       PRODS.push({nom,nb,variante:variante==='Default Title'?'':variante,fourn,statut,statut_produit,stock,pareto,
       en_cmd,fc_m05:fc_cur,wks_left,demande_cumulee:demandeCumulee,vt:vd.total||0,vm:vd.moy||0,vc:vd.curV||0,sems:vd.sems||{},vn1,idVariante,skuFourn,
       cout: cout_unitaire, id: idVariante, vn1_months: vn1_months_array});
+    });
+
+    // 🚀 NEW: Sync the Mirage supplier names to the Forecast data
+    FORECAST.forEach(f => {
+        const pMatch = PRODS.find(p => p.nom === f.nom);
+        if (pMatch) f.fourn = pMatch.fourn;
     });
 
     // Stocky Orders
@@ -790,11 +801,14 @@ async function loadData(){
       const coutParNom = COUT_MAP[normKey(nom)] || (pMatch ? COUT_MAP[normKey(pMatch.nb)] || 0 : 0) || 0;
       const coutFinal = coutParId > 0 ? coutParId : (coutParNom > 0 ? coutParNom : (idPrev ? (PRIX_FALLBACK_ID[idPrev] || 0) : 0));
       
-      return{nom,fourn:String(r['Fournisseur']||''),cat:(idPrev&&ABC_ID_MAP[idPrev])||ABC_MAP[nom]||String(r['Catégorie']||'C'),
-        delai:n(r['Délai livraison']),
+      // 🚀 NEW: Inherit the Mirage supplier name from PRODS
+      const fournFinal = pMatch ? pMatch.fourn : String(r['Fournisseur']||'').trim();
+      
+      return{nom,fourn:fournFinal,cat:(idPrev&&ABC_ID_MAP[idPrev])||ABC_MAP[nom]||String(r['Catégorie']||'C'),        delai:n(r['Délai livraison']),
         tc:n(r['TOTAL commandes']),tf:n(r['Total forecast']),ts:n(r['Total stock']),
         prix:coutFinal,vm:vdp.moy||0,sems,idVariante:idPrev};
     });
+
     PREVISION=PREVISION.concat(pT(raw['Prevision commandes - Clovis']||[]).filter(r=>{
       const nom=String(r['Nom produit']||'').trim();
       return nom&&!nom.startsWith('Dernière');
@@ -898,14 +912,8 @@ function populateFiltres(){
   // Build the master Supplier Dropdown list
   const opts='<option value="">Tous fournisseurs</option>'+FOURNISSEURS.map(f=>`<option>${f}</option>`).join('');
 
-  // Inject this identical dropdown list into five different tabs at once
-  // (Alertes, Stocks, Ventes, Etat, Receptions)
-  ['f-a','f-s','f-v','f-e','f-r'].forEach(id=>{const el=document.getElementById(id);if(el)el.innerHTML=opts;});
-
-  // Apply team-specific filters (Nina vs Clovis) to the main screen
-  const sf=document.getElementById('s-f');
-  const fournsFiltered=FOURNISSEURS.filter(f=>equipeMatch(f));
-  if(sf)sf.innerHTML='<option value="">Choisir un fournisseur…</option>'+fournsFiltered.map(f=>`<option>${f}</option>`).join('');
+  // 🚀 FIXED: Only target 'f-r' since the others use checkboxes or were deleted
+  ['f-r'].forEach(id=>{const el=document.getElementById(id);if(el)el.innerHTML=opts;});
 
   // Build the "Week Selection" Dropdowns (e.g., S24, S25, S26)
   const W=cw();
@@ -989,7 +997,6 @@ function nav(v,el){
 function renderView(v){
   if(v==='alertes')rAlertes();
   else if(v==='stocks')rStocks();
-  else if(v==='fournisseurs')rFourn();
   else if(v==='ventes')rVentes();
   else if(v==='receptions')rReceptions();
   else if(v==='po')rPO();
@@ -1005,7 +1012,7 @@ function renderView(v){
 function srt(tbl,col,el){
   const s=SORTS[tbl];
   // ADD d:'dormant' to the end of this map:
-  const viewMap={a:'alertes',s:'stocks',f:'fournisseurs',v:'ventes',fc:'forecast',pr:'promos', d:'dormant'};  
+  const viewMap={a:'alertes',s:'stocks',v:'ventes',fc:'forecast',pr:'promos', d:'dormant'};  
   const scope=tbl==='f'?document.getElementById('fc'):document.getElementById('v-'+(viewMap[tbl]||tbl));
   scope?.querySelectorAll('th').forEach(t=>{t.classList.remove('asc','desc');});
   if(s.col===col)s.dir*=-1;else{s.col=col;s.dir=1;}
@@ -1014,7 +1021,6 @@ function srt(tbl,col,el){
   // ADD  else if(tbl==='d')rDormant();  to the end of this line:
   if(tbl==='a') rAlertes();
   else if(tbl==='s')rStocks();
-  else if(tbl==='f')rFourn();
   else if(tbl==='v')rVentes();
   else if(tbl==='fc')rForecast();
   else if(tbl==='pr')rPromos();
@@ -1157,135 +1163,65 @@ function rAlertes(){
   }).join('')||'<tr><td colspan="9" style="text-align:center;padding:40px;color:var(--t3)">Aucune alerte 🎉</td></tr>';
 }
 
-// 2. STOCKS TAB
+// 2. STOCK COMPLET TAB (FUSED DASHBOARD)
 function rStocks(){
-  const srch=(document.getElementById('s-s')?.value||'').toLowerCase();
-  const fourns=gC('fs'),pars=gC('ps'),stats=gC('sts');
+  const srch = (document.getElementById('s-s')?.value || '').toLowerCase();
+  const fourns = gC('fs'), pars = gC('ps'), stats = gC('sts');
 
-  // Similar to the Alertes tab, but allows active/healthy items to pass through
-  let rows=PRODS.filter(p=>{
-    if(!equipeMatch(p.fourn))
-      return false;
-    if(fourns.length&&!fourns.includes(p.fourn))
-      return false;
-    if(pars.length&&!pars.includes(p.pareto))
-      return false;
-    if(stats.length&&!stats.includes(p.statut))
-      return false;
-    if(srch&&!p.nom.toLowerCase().includes(srch))
-      return false;
+  // PHASE 1: Base Filter (Team, Supplier, Search Bar)
+  let baseRows = PRODS.filter(p => {
+    if (!equipeMatch(p.fourn)) return false;
+    if (fourns.length && !fourns.includes(p.fourn)) return false;
+    
+    // 🚀 UPGRADE: Search now looks at both Name and SKU!
+    if (srch && !p.nom.toLowerCase().includes(srch) && !(p.skuFourn || '').toLowerCase().includes(srch)) return false;
     return true;
   });
 
-  rows=sortProds(rows,SORTS.s.col,SORTS.s.dir);
-  document.getElementById('rc-s').textContent=rows.length+' produit(s)';
+  // PHASE 2: Calculate KPIs based on the current supplier/search view
+  const rupt = baseRows.filter(p => p.statut === 'rupture').length;
+  const crit = baseRows.filter(p => p.statut === 'critique').length;
+  const ok = baseRows.length - rupt - crit;
 
-// DRAW THE TABLE: Generate the HTML for every single row and insert it into the page
-  const now = Date.now(); // 🚀 NEW: Grabs the exact millisecond of right now
-  document.getElementById('tb-s').innerHTML=rows.map(p=>{ // Remember to keep this specific to tb-a, tb-s, or tbody depending on the function!
+  // PHASE 3: Inject the KPI Cards
+  document.getElementById('mg-s').innerHTML = `
+    <div class="mc" onclick="clearDD('dd-sts','sts',rStocks)"><div class="mcl">Total produits</div><div class="mcv">${fmt(baseRows.length)}</div><div class="mcs">Tout afficher</div></div>
+    <div class="mc" onclick="sC('sts',['rupture']);updDD('dd-sts','sts');rStocks()"><div class="mcl">Ruptures</div><div class="mcv r">${fmt(rupt)}</div><div class="mcs">↗ Filtrer</div></div>
+    <div class="mc" onclick="sC('sts',['critique']);updDD('dd-sts','sts');rStocks()"><div class="mcl">Critique</div><div class="mcv a">${fmt(crit)}</div><div class="mcs">↗ Filtrer</div></div>
+    <div class="mc" onclick="sC('sts',['active']);updDD('dd-sts','sts');rStocks()"><div class="mcl">OK</div><div class="mcv g">${fmt(ok)}</div><div class="mcs">↗ Filtrer</div></div>
+  `;
+
+  // PHASE 4: Final Table Filter (Pareto, Status)
+  let rows = baseRows.filter(p => {
+    if (pars.length && !pars.includes(p.pareto)) return false;
+    if (stats.length && !stats.includes(p.statut)) return false;
+    return true;
+  });
+
+  // Sort and count final rows
+  rows = sortProds(rows, SORTS.s.col, SORTS.s.dir);
+  document.getElementById('rc-s').textContent = rows.length + ' produit(s)';
+
+  // PHASE 5: Draw the Table
+  const now = Date.now(); 
+  document.getElementById('tb-s').innerHTML = rows.map(p => { 
     const cleanNom = (p.variante && p.nom.endsWith(' - ' + p.variante)) ? p.nom.slice(0, -(p.variante.length + 3)) : p.nom;
-    
-    // 🚀 NEW: Bulletproof timestamp comparison
     const enPromo = PROMOS.some(pr => (pr.sku === p.skuFourn || normKey(pr.produit) === normKey(p.nom) || normKey(pr.produit) === normKey(p.nb)) && now >= pr.tsStart && now <= pr.tsEnd);
     const searchKey = p.skuFourn ? p.skuFourn.replace(/'/g,"\\\\'") : p.nom.replace(/'/g,"\\\\'");
     const promoBadge = enPromo ? `<span class="promo-link" title="Voir la promotion" onclick="allerAuxPromos('${searchKey}')">⭐ Promo</span>` : '';
 
     return `<tr>
-    <td><div class="pn">${cleanNom}${promoBadge}</div>${p.variante?`<div class="pv">${p.variante}</div>`:''}</td>
-    <td style="white-space:nowrap;font-size:12px">${p.fourn||'—'}</td>
+    <td><div class="pn">${cleanNom}${promoBadge}</div>${p.variante ? `<div class="pv">${p.variante}</div>` : ''}</td>
+    <td style="white-space:nowrap;font-size:12px">${p.fourn || '—'}</td>
     <td>${bP(p.pareto)}</td>
     <td style="text-align:right"><span class="${sc(p.stock)}">${fmt(p.stock)}</span></td>
-    <td>${bS(p.statut,p.statut_produit)}</td>
-    <td style="text-align:right;font-size:12px">${p.wks_left!==null?p.wks_left+' sem.':'—'}</td>
+    <td>${bS(p.statut, p.statut_produit)}</td>
+    <td style="text-align:right;font-size:12px">${p.wks_left !== null ? p.wks_left + ' sem.' : '—'}</td>
     <td style="text-align:right">${p.en_cmd > 0 ? `<span class="cmd-link" onclick="allerAuxReceptions('${p.nom.replace(/'/g,"\\\\'")}')">${fmt(p.en_cmd)}</span>` : '—'}</td>
     <td style="text-align:right">${fmt(p.fc_m05)}</td>
-    <td style="text-align:right;font-weight:500;color:${p.statut==='rupture'?'var(--re)':p.statut==='critique'?'var(--am)':'var(--gr)'}">${fmt(p.stock+p.en_cmd)}</td>
+    <td style="text-align:right;font-weight:500;color:${p.statut === 'rupture' ? 'var(--re)' : p.statut === 'critique' ? 'var(--am)' : 'var(--gr)'}">${fmt(p.stock + p.en_cmd)}</td>
   </tr>`;
-  }).join('')||'<tr><td colspan="9" style="text-align:center;padding:40px;color:var(--t3)">Aucun résultat</td></tr>';
-}
-
-// This function zooms in on a single supplier to evaluate their specific 
-// inventory health, out-of-stock items, and upcoming forecasts.
-function rFourn(){
-  // 1. Fetch what the user currently has selected
-  const sel=document.getElementById('s-f')?.value||''; // Which supplier is chosen in the dropdown?
-  const pars=gC('pf'), stats=gC('stf');                // Which Pareto/Status checkboxes are ticked?
-  const fc=document.getElementById('fc');              // The blank canvas where we will draw the table
-  
-  // 2. THE GATEKEEPER
-  // If the user hasn't selected a supplier yet, don't draw an empty table. 
-  // Just show a polite message asking them to pick one.
-  if(!sel){
-      fc.innerHTML='<p style="color:var(--t3);padding:20px">Sélectionnez un fournisseur</p>';
-      return;
-  }
-  
-  // 3. THE ISOLATION
-  // Search the massive master inventory list and pull out ONLY the products 
-  // that belong to the chosen supplier.
-  const allRows=PRODS.filter(p=>p.fourn===sel);
-  
-  // 4. THE FILTER GAUNTLET
-  // Take that supplier's products and apply any checkbox filters the user clicked
-  const rows=allRows.filter(p=>{
-    if(pars.length && !pars.includes(p.pareto)) return false; // Filter by A/B/C
-    if(stats.length && !stats.includes(p.statut)) return false; // Filter by Health Status
-    return true; // Keep the product if it passes the tests
-  });
-
-  // Sort the final list based on the user's clicked column header (default is Pareto)
-  const sorted=sortProds(rows,SORTS.f.col,SORTS.f.dir);
-  
-  // 5. CALCULATE SUPPLIER KPIs
-  // Count exactly how many of this supplier's items are dead, dying, or healthy.
-  const rupt=allRows.filter(p=>p.statut==='rupture');
-  const crit=allRows.filter(p=>p.statut==='critique');
-  
-  // 6. DRAW THE UI
-  // Generate the colorful boxes at the top, and the detailed table underneath
-  fc.innerHTML=`
-    <div class="mg">
-      <div class="mc" onclick="clearDD('dd-stf','stf',rFourn)"><div class="mcl">Total produits</div><div class="mcv">${allRows.length}</div><div class="mcs">Tout afficher</div></div>
-      <div class="mc" onclick="sC('stf',['rupture']);updDD('dd-stf','stf');rFourn()"><div class="mcl">Ruptures</div><div class="mcv r">${rupt.length}</div><div class="mcs">↗ Filtrer</div></div>
-      <div class="mc" onclick="sC('stf',['critique']);updDD('dd-stf','stf');rFourn()"><div class="mcl">Critique</div><div class="mcv a">${crit.length}</div><div class="mcs">↗ Filtrer</div></div>
-      <div class="mc" onclick="sC('stf',['active']);updDD('dd-stf','stf');rFourn()"><div class="mcl">OK</div><div class="mcv g">${allRows.length-rupt.length-crit.length}</div><div class="mcs">↗ Filtrer</div></div>
-    </div>
-    
-    <div class="tw"><table>
-      <thead>
-            <tr>
-                <th onclick="srt('f','nom',this)">Produit</th>
-                <th onclick="srt('f','pareto',this)" class="asc">Pareto</th>
-                <th style="text-align:right" onclick="srt('f','stock',this)">Stock</th>
-                <th onclick="srt('f','statut',this)">Statut</th>
-                <th style="text-align:right" onclick="srt('f','en_cmd',this)">En commande</th>
-                <th style="text-align:right" onclick="srt('f','fc_m05',this)">Forecast M05</th>
-            </tr>
-          </thead>
-          <tbody>
-            ${(()=>{ 
-                const now = Date.now(); 
-                return sorted.map(p=>{
-                    const cleanNom = (p.variante && p.nom.endsWith(' - ' + p.variante)) ? p.nom.slice(0, -(p.variante.length + 3)) : p.nom;
-                    
-                    // 🚀 FIXED: Only ONE enPromo variable using the future-proof timestamp logic
-                    const enPromo = PROMOS.some(pr => (pr.sku === p.skuFourn || normKey(pr.produit) === normKey(p.nom) || normKey(pr.produit) === normKey(p.nb)) && now >= pr.tsStart && now <= pr.tsEnd);
-                    
-                    const searchKey = p.skuFourn ? p.skuFourn.replace(/'/g,"\\\\'") : p.nom.replace(/'/g,"\\\\'");
-                    const promoBadge = enPromo ? `<span class="promo-link" title="Voir la promotion" onclick="allerAuxPromos('${searchKey}')">⭐ Promo</span>` : '';
-
-                    return `<tr>
-                    <td><div class="pn">${cleanNom}${promoBadge}</div>${p.variante?`<div class="pv">${p.variante}</div>`:''}</td>
-                    <td>${bP(p.pareto)}</td>
-                    <td style="text-align:right"><span class="${sc(p.stock)}">${fmt(p.stock)}</span></td>
-                    <td>${bS(p.statut,p.statut_produit)}</td>
-                    <td style="text-align:right">${p.en_cmd > 0 ? `<span class="cmd-link" onclick="allerAuxReceptions('${p.nom.replace(/'/g,"\\\\'")}')">${fmt(p.en_cmd)}</span>` : '—'}</td>
-                    <td style="text-align:right">${fmt(p.fc_m05)}</td>
-                </tr>`;
-                }).join(''); 
-            })()}
-          </tbody>
-        </table></div>`;
+  }).join('') || '<tr><td colspan="9" style="text-align:center;padding:40px;color:var(--t3)">Aucun résultat</td></tr>';
 }
 
 
@@ -1911,7 +1847,8 @@ function rPO(){
       <input type="text" placeholder="🔍 Ajouter un autre produit de ce fournisseur…" id="search-${blocId}"
         style="width:100%;padding:7px 10px;border:1px solid var(--b2);border-radius:6px;font-size:12px"
         oninput="rechercherProduitBlock('${fSafe}','${blocId}')">
-      <div id="search-res-${blocId}" style="display:none;position:absolute;z-index:5;background:var(--w);border:1px solid var(--b2);border-radius:6px;width:100%;max-height:220px;overflow-y:auto;box-shadow:0 4px 12px rgba(0,0,0,.08)"></div>
+      <!-- 🚀 FIXED: Changed z-index from 5 to 50 to fly over table headers -->
+      <div id="search-res-${blocId}" style="display:none;position:absolute;z-index:50;background:var(--w);border:1px solid var(--b2);border-radius:6px;width:100%;max-height:220px;overflow-y:auto;box-shadow:0 4px 12px rgba(0,0,0,.08)"></div>
     </div>`;
   }
 
@@ -2829,7 +2766,8 @@ function ouvrirDocumentPO(fourn, poNum, dateLivraison, lignes){
   }).join('');
 
   const ADRESSE = 'Café Liégeois Canada Inc.<br>5524 Rue Saint-Patrick<br>Suite 140<br>Montréal QC H4E 1A8<br>Canada';
-  const fournSafe = fourn.replace(/</g, '&lt;');
+  const fournReel = fourn.replace(' (Café)', '').trim(); // 🚀 NEW: Strip the tag
+  const fournSafe = fournReel.replace(/</g, '&lt;');
 
   const html = `<!DOCTYPE html><html lang="fr"><head><meta charset="UTF-8"><title>PO — ${fournSafe}</title>
   <style>
@@ -2959,7 +2897,14 @@ function telechargerPDFDepuisModal(){
   const lignes = MODIF_PO_LINES.filter(l => l.quantite > 0).map(l => ({
     nom: l.nom, variante: l.variante || '', sku: l.sku || '—', qte: l.quantite, prix: l.prix || 0
   }));
-  ouvrirDocumentPO(fourn, poNumber, '-', lignes);
+  
+  // 🚀 FIXED: Use calendar date, fallback to fuzzy text, fallback to '-'
+  const rawDate = document.getElementById('mp-date').value;
+  const dateFmt = rawDate 
+      ? new Date(rawDate + 'T00:00:00').toLocaleDateString('fr-CA', {day:'numeric', month:'long', year:'numeric'}) 
+      : (MODIF_PO_CTX.originalDate || '-');
+  
+  ouvrirDocumentPO(fourn, poNumber, dateFmt, lignes);
 }
 
 // =====================================================================
@@ -3053,9 +2998,11 @@ async function envoyerCommandeFournisseur(idx, semaines){
   }
 
   // SCENARIO B: MIXED LOGIC (Sends Shopify lines, glues custom lines onto PDF)
+  // SCENARIO B: MIXED LOGIC (Sends Shopify lines, glues custom lines onto PDF)
   try {
     const note = 'Commande créée depuis le dashboard - semaine(s) ' + sems.map(s=>'S'+String(s).padStart(2,'0')).join(', ') + (dejaEnvoyes.length?' (complément)':'');
-    const data = await envoyerLignesAuBackend(fourn, note, lignesShopify, dateLivraison);
+    const fournReel = fourn.replace(' (Café)', '').trim(); // 🚀 NEW: Strip tag before sending to Shopify
+    const data = await envoyerLignesAuBackend(fournReel, note, lignesShopify, dateLivraison);
 
     if(data.success){
       if(!PO_ENVOYES[fourn])PO_ENVOYES[fourn]=[];
@@ -3111,6 +3058,32 @@ function ouvrirModifPO(fourn, poNumber){
   document.getElementById('mp-titre').textContent = 'Modifier le PO '+poNumber+' — '+fourn;
   document.getElementById('mp-add-input').value='';
   document.getElementById('mp-add-res').style.display='none';
+  
+  // 🚀 FIXED: Auto-populate date OR show fuzzy text label
+  const dateInput = document.getElementById('mp-date');
+  const fuzzyLabel = document.getElementById('mp-fuzzy-date');
+  dateInput.value = '';
+  fuzzyLabel.textContent = '';
+  
+  const existingOrder = STOCKY.find(c => c.cmd === poNumber) || TRANSFERTS.find(c => c.cmd === poNumber);
+  
+  if (existingOrder && existingOrder.livraison) {
+      // Save original text in memory for the PDF fallback
+      MODIF_PO_CTX.originalDate = existingOrder.livraison; 
+      
+      try {
+          const parts = existingOrder.livraison.split('/');
+          if (parts.length === 3) {
+              const y = parseInt(parts[2]);
+              const safeY = y < 100 ? y + 2000 : y;
+              dateInput.value = `${safeY}-${parts[1].padStart(2, '0')}-${parts[0].padStart(2, '0')}`;
+          } else if (existingOrder.livraison !== 'Indéterminé' && existingOrder.livraison !== '—') {
+              // It's a text date like "Mi-septembre"
+              fuzzyLabel.textContent = `(Actuel : ${existingOrder.livraison})`;
+          }
+      } catch(e) {}
+  }
+
   renderLignesModifPO();
   document.getElementById('modal-modifpo-overlay').style.display = 'flex';
 }
@@ -3288,7 +3261,10 @@ async function enregistrerModifPO(){
 
   try{
     const note = 'Modification du PO ' + poNumber + ' — complément suite ajustement de quantités';
-    const data = await envoyerLignesAuBackend(fourn, note, envoyables.map(l=>({idVariante:l.idVariante, quantite:l.quantite})), '');
+    
+    // 🚀 NEW: Capture the date and send it to Shopify
+    const dateInput = document.getElementById('mp-date').value;
+    const data = await envoyerLignesAuBackend(fourn, note, envoyables.map(l=>({idVariante:l.idVariante, quantite:l.quantite})), dateInput);
 
     if(data.success){
       // Save EVERYTHING back to local state so the PDF includes the original + new custom + new envoyables
@@ -3385,7 +3361,8 @@ function retirerLigneManuelle(idx){
 }
 
 function majQuantiteManuelle(idx, val){
-  MANUAL_LINES[idx].quantite = Math.max(0, parseFloat(val) || 0); // Modifié
+  // 🚀 FIXED: Enforce whole numbers if the user types decimals manually
+  MANUAL_LINES[idx].quantite = Math.max(0, parseInt(val, 10) || 0); 
   majTotalManuel();
 }
 
@@ -3400,7 +3377,7 @@ function ajouterProduitPersonnaliseManuel(){
   
   const nom = (nomEl?.value||'').trim();
   const prix = Math.max(0, parseFloat(prixEl?.value)||0);
-  const qte = Math.max(0.01, parseFloat(qteEl?.value)||1); // Modifié
+  const qte = Math.max(1, parseInt(qteEl?.value, 10)||1);
   
   if(!nom){ alert('Indique un nom de produit.'); return; }
   

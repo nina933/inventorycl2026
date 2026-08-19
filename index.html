@@ -51,7 +51,6 @@
     <div class="sbl">Stock</div>
     <div class="ni on" onclick="nav('alertes',this)"><div class="nil"><span>⚠</span>Alertes</div><span class="nib" id="nb-a">—</span></div>
     <div class="ni" onclick="nav('stocks',this)"><div class="nil"><span>▦</span>Stock complet</div></div>
-    <div class="ni" onclick="nav('fournisseurs',this)"><div class="nil"><span>◆</span>Fournisseurs</div></div>
     <div class="sbl">Ventes</div>
     <div class="ni" onclick="nav('ventes',this)"><div class="nil"><span>↗</span>Ventes N</div></div>
     <div class="sbl">Simulation</div>
@@ -104,6 +103,7 @@
       </table></div>
     </div>
     <div id="v-stocks" class="view">
+      <div class="mg" id="mg-s"></div> <!-- 🚀 NEW: The KPI Container -->
       <div class="sh"><span class="st">Stock complet</span><span class="rc" id="rc-s"></span></div>
       <div class="fl">
         <input class="fin" id="s-s" placeholder="Rechercher produit…" oninput="rStocks()">
@@ -126,15 +126,7 @@
         <tbody id="tb-s"></tbody>
       </table></div>
     </div>
-    <div id="v-fournisseurs" class="view">
-      <div class="sh"><span class="st">Vue par fournisseur</span></div>
-      <div class="fl">
-        <select class="fsel" id="s-f" onchange="rFourn()" style="min-width:220px"><option value="">Choisir un fournisseur…</option></select>
-        <div class="dd" id="dd-pf"><button class="dd-btn" onclick="toggleDD('dd-pf')">Pareto</button><div class="dd-panel"><div class="dd-all" onclick="clearDD('dd-pf','pf',rFourn)">Tout décocher</div><div class="dd-sep"></div><label class="dd-item"><input type="checkbox" name="pf" value="A" onchange="updDD('dd-pf','pf');rFourn()"> A</label><label class="dd-item"><input type="checkbox" name="pf" value="B" onchange="updDD('dd-pf','pf');rFourn()"> B</label><label class="dd-item"><input type="checkbox" name="pf" value="C" onchange="updDD('dd-pf','pf');rFourn()"> C</label></div></div>
-        <div class="dd" id="dd-stf"><button class="dd-btn" onclick="toggleDD('dd-stf')">Statut</button><div class="dd-panel"><div class="dd-all" onclick="clearDD('dd-stf','stf',rFourn)">Tout décocher</div><div class="dd-sep"></div><label class="dd-item"><input type="checkbox" name="stf" value="rupture" onchange="updDD('dd-stf','stf');rFourn()"> Rupture</label><label class="dd-item"><input type="checkbox" name="stf" value="critique" onchange="updDD('dd-stf','stf');rFourn()"> Critique</label><label class="dd-item"><input type="checkbox" name="stf" value="active" onchange="updDD('dd-stf','stf');rFourn()"> Actif</label></div></div>
-      </div>
-      <div id="fc"></div>
-    </div>
+    
     <div id="v-ventes" class="view">
       <div class="sh"><span class="st">Ventes N vs N-1</span><span class="rc" id="rc-v"></span></div>
       <div class="fl">
@@ -458,7 +450,7 @@
     <div style="margin-top:4px;display:flex;gap:6px;align-items:center;margin-bottom:14px">
       <input type="text" placeholder="Nom du produit…" id="mc-cust-nom" style="flex:1;padding:6px 8px;border:1px solid var(--b2);border-radius:6px;font-size:12px">
       <input type="number" min="0" step="0.01" placeholder="Prix unit." id="mc-cust-prix" style="width:80px;padding:6px 8px;border:1px solid var(--b2);border-radius:6px;font-size:12px;text-align:right">
-      <input type="number" min="0.01" step="0.01" value="1" placeholder="Qté" id="mc-cust-qte" style="width:60px;padding:6px 8px;border:1px solid var(--b2);border-radius:6px;font-size:12px;text-align:center">
+      <input type="number" min="1" step="1" value="1" placeholder="Qté" id="mc-cust-qte" style="width:60px;padding:6px 8px;border:1px solid var(--b2);border-radius:6px;font-size:12px;text-align:center">
       <button class="fb" style="padding:6px 12px;font-size:12px" onclick="ajouterProduitPersonnaliseManuel()">+ Ajouter custom</button>
     </div>
     
@@ -491,6 +483,13 @@
 
     <div id="mp-lignes" style="margin-bottom:6px"></div>
     <div id="mp-total" style="text-align:right;font-size:13px;font-weight:600;color:var(--br);margin:10px 0 16px"></div>
+
+    <!-- 🚀 NEW: Delivery Date Input + Fuzzy Date Label -->
+    <div style="margin-bottom:16px; display:flex; align-items:center; gap:10px;">
+      <span style="font-size:11px;color:var(--t2);font-weight:600">Date de livraison :</span>
+      <input type="date" id="mp-date" style="padding:5px 8px; border:1px solid var(--b2); border-radius:6px; font-size:12px; font-family:'Inter', sans-serif">
+      <span id="mp-fuzzy-date" style="font-size:11px;color:var(--am);font-style:italic;"></span>
+    </div>
 
     <div style="position:relative;margin-bottom:16px">
       <input type="text" id="mp-add-input" placeholder="🔍 Ajouter un produit manquant à ce PO…"
