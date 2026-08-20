@@ -595,7 +595,7 @@ async function loadData(){
       const typeProduit = String(r[18]||'').toLowerCase().trim();
       
       let fourn = fournOriginal;
-      if (typeProduit.includes('coffee') || typeProduit.includes('café') || typeProduit.includes('cafe')) {
+      if (typeProduit === 'coffee') {
           fourn = fournOriginal + ' (Café)';
       }
       
@@ -1653,7 +1653,7 @@ function rPO(){
 
   const rowsCalc=PREVISION.filter(r=>{
     if(!equipeMatch(r.fourn))return false;
-    if(fourn&&r.fourn!==fourn)return false;
+    if (fourn && r.fourn !== fourn && r.fourn !== fourn + ' (Café)') return false;
     
     // Ignore "ghost" spreadsheet rows
     if(!r.idVariante) return false;
@@ -1707,7 +1707,7 @@ function rPO(){
   const rowsExtra=[];
   Object.entries(PO_EXTRAS).forEach(([f,lignes])=>{
     if(!equipeMatch(f))return;
-    if(fourn&&f!==fourn)return;
+    if (fourn && f !== fourn && f !== fourn + ' (Café)') return;
     lignes.forEach(l=>{
       if(!(l.quantite>0))return;
       const p=PRODS.find(x=>x.idVariante===l.idVariante);
@@ -1721,7 +1721,7 @@ function rPO(){
   const rowsCustom=[];
   Object.entries(PO_CUSTOM).forEach(([f,lignes])=>{
     if(!equipeMatch(f))return;
-    if(fourn&&f!==fourn)return;
+    if (fourn && f !== fourn && f !== fourn + ' (Café)') return;
     lignes.forEach(cu=>{
       if(!(cu.quantite>0))return;
       // 🚀 NEW: Add "variante: cu.variante"
@@ -1789,7 +1789,7 @@ function rPO(){
     if(!(p.statut==='rupture'||p.statut==='critique'))return false;
     if(!(p.demande_cumulee>0))return false;
     if(!equipeMatch(p.fourn))return false;
-    if(fourn&&p.fourn!==fourn)return false;
+    if (fourn && p.fourn !== fourn && p.fourn !== fourn + ' (Café)') return false;
     if(nomsDejaPO.has(p.nom))return false;
     if(p.en_cmd>0&&(p.stock+p.en_cmd)>=p.demande_cumulee)return false;
 
@@ -1877,7 +1877,7 @@ function rPO(){
   
   Object.keys(PO_ENVOYES).forEach(f2=>{
     if(!equipeMatch(f2))return;
-    if(fourn&&f2!==fourn)return;
+    if (fourn && f2 !== fourn && f2 !== fourn + ' (Café)') return;
     const idVDejaDansByF=new Set((byF[f2]||[]).map(r=>r.idVariante||(PRODS.find(x=>x.nom===r.nom)?.idVariante||'')));
     const idVCommittes=new Set((PO_ENVOYES[f2]||[]).flatMap(e=>e.lignes.map(l=>l.idVariante)));
     
@@ -1893,9 +1893,14 @@ function rPO(){
       const p=PRODS.find(x=>x.idVariante===idV);
       if(!p)return;
       if(!byF[f2])byF[f2]=[];
+      
+      // 🚀 FIXED: Grab existing quantities from PREVISION instead of wiping them out with an empty {}
+      let existingPrev = PREVISION.find(x => x.idVariante === idV);
+      let currentSems = existingPrev ? Object.assign({}, existingPrev.sems) : {};
+
       byF[f2].push({nom:p.nom,fourn:f2,cat:p.pareto||'C',delai:DELAIS_MAP[f2]||0,
         prix:PRIX_ID_MAP[idV]||PRIX_MAP[normKey(p.nom)]||PRIX_FALLBACK_ID[idV]||0,
-        vm:p.vm||0,tc:0,sems:{},idVariante:idV});
+        vm:p.vm||0,tc:0,sems:currentSems,idVariante:idV});
       idVDejaDansByF.add(idV);
     });
   });
@@ -3677,7 +3682,15 @@ function majQuantitePO(fourn, idVariante, nom, sem, val, tipo, customId){
         if(cu) cu.quantite = v;
     } else {
         let r = PREVISION.find(x => x.fourn === fourn && (idVariante ? x.idVariante === idVariante : x.nom === nom));
-        if(r) r.sems[sem] = v;
+        if(r) {
+            r.sems[sem] = v;
+        } else {
+            // 🚀 FIXED: If a legacy/injected item isn't in PREVISION, save it safely to manual extras!
+            if(!PO_EXTRAS[fourn]) PO_EXTRAS[fourn] = [];
+            let ex = PO_EXTRAS[fourn].find(x => x.idVariante === idVariante);
+            if(ex) ex.quantite = v;
+            else PO_EXTRAS[fourn].push({ idVariante: idVariante, nom: nom, quantite: v });
+        }
     }
     
     // 🚀 FIX SCROLL JUMP: Save current scroll position
