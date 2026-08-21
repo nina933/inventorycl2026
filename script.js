@@ -1909,36 +1909,6 @@ function rPO(){
   const byF={};
   rows.forEach(r=>{if(!byF[r.fourn])byF[r.fourn]=[];byF[r.fourn].push(r);});
   
-  Object.keys(PO_ENVOYES).forEach(f2=>{
-    if(!equipeMatch(f2))return;
-    if (fourn && f2 !== fourn && f2 !== fourn + ' (Café)') return;
-    const idVDejaDansByF=new Set((byF[f2]||[]).map(r=>r.idVariante||(PRODS.find(x=>x.nom===r.nom)?.idVariante||'')));
-    const idVCommittes=new Set((PO_ENVOYES[f2]||[]).flatMap(e=>e.lignes.map(l=>l.idVariante)));
-    
-    idVCommittes.forEach(idV=>{
-      // Prevent empty IDs (shipping fees/ghost items) from being resurrected
-      if(!idV) return;
-      
-      if(idVDejaDansByF.has(idV))return;
-
-      // NOUVEAU: Si l'utilisateur l'a masqué, on ignore l'injection.
-      if(PO_IGNORED[f2] && PO_IGNORED[f2].includes(idV)) return;
-
-      const p=PRODS.find(x=>x.idVariante===idV);
-      if(!p)return;
-      if(!byF[f2])byF[f2]=[];
-      
-      // 🚀 FIXED: Grab existing quantities from PREVISION instead of wiping them out with an empty {}
-      let existingPrev = PREVISION.find(x => x.idVariante === idV);
-      let currentSems = existingPrev ? Object.assign({}, existingPrev.sems) : {};
-
-      byF[f2].push({nom:p.nom,fourn:f2,cat:p.pareto||'C',delai:DELAIS_MAP[f2]||0,
-        prix:PRIX_ID_MAP[idV]||PRIX_MAP[normKey(p.nom)]||PRIX_FALLBACK_ID[idV]||0,
-        vm:p.vm||0,tc:0,sems:currentSems,idVariante:idV});
-      idVDejaDansByF.add(idV);
-    });
-  });
-  
   const tousFourns=[...new Set([...Object.keys(byF),...Object.keys(byFournHP)])].sort((a,b)=>a.localeCompare(b));
   let html='';
   
