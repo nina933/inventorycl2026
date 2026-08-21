@@ -640,7 +640,7 @@ async function loadData(){
 
       PRODS.push({nom,nb,variante:variante==='Default Title'?'':variante,fourn,statut,statut_produit,stock,pareto,
       en_cmd,fc_m05:fc_cur,wks_left,demande_cumulee:demandeCumulee,vt:vd.total||0,vm:vd.moy||0,vc:vd.curV||0,sems:vd.sems||{},vn1,idVariante,skuFourn,
-      cout: cout_unitaire, id: idVariante, vn1_months: vn1_months_array});
+      cout: cout_unitaire, id: idVariante, vn1_months: vn1_months_array, solde: stock + en_cmd}); // 🚀 FIXED: Injected solde for sorting
     });
 
     // 🚀 NEW: Sync the Mirage supplier names to the Forecast data
@@ -1133,7 +1133,7 @@ function rAlertes(){
     <div class="mc" onclick="clearDD('dd-pa','pa',null);clearDD('dd-fa','fa',null);sC('sta',['rupture']);updDD('dd-sta','sta');rAlertes()"><div class="mcl">Ruptures (stock=0)</div><div class="mcv r">${fmt(ruptures)}</div><div class="mcs">↗ Cliquer pour voir</div></div>
     <div class="mc" onclick="clearDD('dd-pa','pa',null);clearDD('dd-fa','fa',null);sC('sta',['critique']);updDD('dd-sta','sta');rAlertes()"><div class="mcl">Critique</div><div class="mcv a">${fmt(crit)}</div><div class="mcs">↗ Cliquer pour voir</div></div>
     <div class="mc" onclick="clearDD('dd-sta','sta',null);clearDD('dd-fa','fa',null);sC('pa',['A']);updDD('dd-pa','pa');rAlertes()"><div class="mcl">Alertes Pareto A</div><div class="mcv b">${fmt(pa)}</div><div class="mcs">↗ Cliquer pour voir</div></div>
-    <div class="mc" onclick="nav('receptions',document.querySelectorAll('.ni')[5])"><div class="mcl">Réceptions en cours</div><div class="mcv g">${fmt(STOCKY.length)}</div><div class="mcs">↗ Voir les commandes</div></div>`;
+    <div class="mc" onclick="nav('receptions',document.querySelectorAll('.ni')[4])"><div class="mcl">Réceptions en cours</div><div class="mcv g">${fmt(STOCKY.length)}</div><div class="mcs">↗ Voir les commandes</div></div>`;
   
   document.getElementById('nb-a').textContent=rows.length||'';
   document.getElementById('rc-a').textContent=rows.length+' produit(s)';
@@ -1613,6 +1613,10 @@ function ouvrirConfirmPO(idx, semaines) {
     document.getElementById('cpo-lignes').innerHTML = alertHtml + lignesHtml;
     document.getElementById('cpo-total').textContent = `Total : ${fmtM(totalCost)}`;
 
+    // 🚀 NEW: Clear previous dates and notes
+    document.getElementById('cpo-date').value = '';
+    document.getElementById('cpo-note').value = '';
+
     CONFIRM_PO_CTX = { idx, semaines };
     document.getElementById('modal-confirm-po').style.display = 'flex';
 }
@@ -1627,6 +1631,36 @@ function validerConfirmPO() {
     const { idx, semaines } = CONFIRM_PO_CTX;
     fermerConfirmPO();
     envoyerCommandeFournisseur(idx, semaines); // Déclenche le vrai payload
+}
+
+// 🚀 NEW: Generate a Draft PDF directly from the confirmation modal
+function telechargerPDFConfirmPO() {
+    if (!CONFIRM_PO_CTX) return;
+    const { idx, semaines } = CONFIRM_PO_CTX;
+    const sems = Array.isArray(semaines) ? semaines : [semaines];
+    const grp = window.PO_GROUPES[idx];
+    if(!grp) return;
+    
+    const [fourn, prods] = grp;
+
+    const lignes = prods.map(r => {
+        const p = PRODS.find(x => x.nom === r.nom);
+        const targetId = r._custom ? r.customId : (r.idVariante || (p ? p.idVariante : ''));
+        return {
+            nom: r.nom,
+            variante: r._custom ? r.variante : (p && p.variante ? p.variante : ''),
+            sku: SKU_OVERRIDE_TEMP[targetId] !== undefined ? SKU_OVERRIDE_TEMP[targetId] : (p && p.skuFourn ? p.skuFourn : ''),
+            qte: sems.reduce((s, sw) => s + (r.sems[sw] || 0), 0),
+            prix: r.prix || 0
+        };
+    }).filter(l => l.qte > 0);
+
+    const rawDate = document.getElementById('cpo-date').value;
+    const dateFmt = rawDate 
+        ? new Date(rawDate + 'T00:00:00').toLocaleDateString('fr-CA', {day:'numeric', month:'long', year:'numeric'}) 
+        : '-';
+
+    ouvrirDocumentPO(fourn, "Brouillon", dateFmt, lignes);
 }
 
 // -----------------------------------------------------------------
@@ -1874,36 +1908,6 @@ function rPO(){
   const wks=[];for(let i=minW;i<=Math.min(52,maxW+2);i++)wks.push(i);
   const byF={};
   rows.forEach(r=>{if(!byF[r.fourn])byF[r.fourn]=[];byF[r.fourn].push(r);});
-  
-  Object.keys(PO_ENVOYES).forEach(f2=>{
-    if(!equipeMatch(f2))return;
-    if (fourn && f2 !== fourn && f2 !== fourn + ' (Café)') return;
-    const idVDejaDansByF=new Set((byF[f2]||[]).map(r=>r.idVariante||(PRODS.find(x=>x.nom===r.nom)?.idVariante||'')));
-    const idVCommittes=new Set((PO_ENVOYES[f2]||[]).flatMap(e=>e.lignes.map(l=>l.idVariante)));
-    
-    idVCommittes.forEach(idV=>{
-      // Prevent empty IDs (shipping fees/ghost items) from being resurrected
-      if(!idV) return;
-      
-      if(idVDejaDansByF.has(idV))return;
-
-      // NOUVEAU: Si l'utilisateur l'a masqué, on ignore l'injection.
-      if(PO_IGNORED[f2] && PO_IGNORED[f2].includes(idV)) return;
-
-      const p=PRODS.find(x=>x.idVariante===idV);
-      if(!p)return;
-      if(!byF[f2])byF[f2]=[];
-      
-      // 🚀 FIXED: Grab existing quantities from PREVISION instead of wiping them out with an empty {}
-      let existingPrev = PREVISION.find(x => x.idVariante === idV);
-      let currentSems = existingPrev ? Object.assign({}, existingPrev.sems) : {};
-
-      byF[f2].push({nom:p.nom,fourn:f2,cat:p.pareto||'C',delai:DELAIS_MAP[f2]||0,
-        prix:PRIX_ID_MAP[idV]||PRIX_MAP[normKey(p.nom)]||PRIX_FALLBACK_ID[idV]||0,
-        vm:p.vm||0,tc:0,sems:currentSems,idVariante:idV});
-      idVDejaDansByF.add(idV);
-    });
-  });
   
   const tousFourns=[...new Set([...Object.keys(byF),...Object.keys(byFournHP)])].sort((a,b)=>a.localeCompare(b));
   let html='';
@@ -2168,7 +2172,7 @@ function toggleBudget(sn,label,total){
 function navPO(el){
   const fourn=el?el.dataset.fourn.replace(/&#39;/g,"'"):arguments[0];
   const sw=el?+el.dataset.sw:arguments[1];
-  const ni=document.querySelectorAll('.ni')[7];
+  const ni=document.querySelectorAll('.ni')[5];
   
   document.querySelectorAll('.ni').forEach(e=>e.classList.remove('on'));
   ni.classList.add('on');
@@ -2586,13 +2590,26 @@ function exportDormantCSV() {
 // ==========================================================
 
 // NEW HELPER: Calculates the custom profit in real-time as the user types
-function majSimulationPersonnalisee(qte, profitUnitaire) {
+function majSimulationPersonnalisee(qte, profitUnitaire, baseProfit) {
     const resultEl = document.getElementById('custom-profit-result');
+    const grandTotalEl = document.getElementById('grand-total-profit');
+    const grandTotalContainer = document.getElementById('grand-total-container');
     if (!resultEl) return;
     
-    const val = (parseInt(qte) || 0) * profitUnitaire;
-    resultEl.textContent = (val > 0 ? '+' : '') + fmtM(val);
-    resultEl.style.color = val >= 0 ? 'var(--gr)' : 'var(--re)';
+    // Calculate the extra profit from the custom box
+    const parsedQte = parseInt(qte, 10);
+    const customProfit = (isNaN(parsedQte) ? 0 : parsedQte) * profitUnitaire;
+    
+    resultEl.textContent = (customProfit > 0 ? '+' : '') + fmtM(customProfit);
+    resultEl.style.color = customProfit >= 0 ? 'var(--gr)' : 'var(--re)';
+
+    // 🚀 NEW: Combine base profit with extra profit and update the big number at the top!
+    if (grandTotalEl && grandTotalContainer) {
+        const grandTotal = baseProfit + customProfit;
+        const sign = grandTotal > 0 ? '+' : '';
+        grandTotalEl.textContent = sign + fmtM(grandTotal);
+        grandTotalContainer.style.color = grandTotal >= 0 ? 'var(--gr)' : 'var(--re)';
+    }
 }
 
 function simulerLigne(targetId, capitalDisponible) {
@@ -2678,7 +2695,7 @@ function simulerLigne(targetId, capitalDisponible) {
     }
 
     // 5. Math Step 3: Constraint Logic (Pick the lower number to be safe)
-    const finalSimulatedUnitsSold = Math.min(simulatedUnitsPurchased, demandCeiling);
+    const finalSimulatedUnitsSold = simulatedUnitsPurchased;
     
     // 6. Math Step 4: Final Profit Calculation
     const finalProjectedGrossProfit = finalSimulatedUnitsSold * profitPerUnit;
@@ -2697,9 +2714,10 @@ function simulerLigne(targetId, capitalDisponible) {
     const sign = isProfitable ? '+' : '';
 
     receiptContent.innerHTML = `
-        <div class="receipt-total" style="color: ${profitColor};">
-            ${sign}${fmtM(finalProjectedGrossProfit)} 
-            <span style="font-size: 11px; font-weight: normal; color: var(--t3);">Profit Brut Projeté</span>
+        <!-- 🚀 FIXED: Added IDs so the script can target and colorize the Grand Total -->
+        <div class="receipt-total" id="grand-total-container" style="color: ${profitColor}; transition: color 0.2s ease;">
+            <span id="grand-total-profit">${sign}${fmtM(finalProjectedGrossProfit)}</span> 
+            <span style="font-size: 11px; font-weight: normal; color: var(--t3); margin-left: 8px;">Profit Brut Projeté</span>
         </div>
         <ul class="receipt-list">
             <li class="receipt-item">
@@ -2713,9 +2731,9 @@ function simulerLigne(targetId, capitalDisponible) {
                 <span class="receipt-source">${demandSourceLabel}</span>
             </li>
             <li class="receipt-item">
-                <strong>3. Ventes retenues :</strong> 
-                <span>La simulation limite à <span class="em">${fmt(finalSimulatedUnitsSold)} unités</span></span>
-                <span class="receipt-source">Le plus bas de 1 ou 2</span>
+                <strong>3. Ventes simulées :</strong> 
+                <span>La simulation utilise <span class="em">${fmt(finalSimulatedUnitsSold)} unités</span></span>
+                <span class="receipt-source">Limité par le capital</span>
             </li>
             <li class="receipt-item">
                 <strong>4. Marge unitaire :</strong> 
@@ -2727,9 +2745,10 @@ function simulerLigne(targetId, capitalDisponible) {
               <div style="display: flex; align-items: center; gap: 12px; flex-wrap: wrap;">
                 <strong>Simulation Custom :</strong>
                 <div style="display:flex; align-items: center; gap: 8px; font-size: 12px;">
-                <span>Si j'achète</span>
-                <input type="number" min="0" placeholder="0" style="width: 70px; padding: 4px; border: 1px solid var(--b2); border-radius: 4px; font-size: 12px; text-align: center;" oninput="majSimulationPersonnalisee(this.value, ${profitPerUnit})">
-                <span>unités</span>
+                <span>Si j'ajoute</span>
+                <!-- 🚀 FIXED: Passed the base profit into the oninput trigger -->
+                <input type="number" min="0" placeholder="0" style="width: 70px; padding: 4px; border: 1px solid var(--b2); border-radius: 4px; font-size: 12px; text-align: center;" oninput="majSimulationPersonnalisee(this.value, ${profitPerUnit}, ${finalProjectedGrossProfit})">
+                <span>unités en plus</span>
                 </div>
                 </div>
                 <span id="custom-profit-result" style="color: var(--gr); font-weight: 700; font-size: 14px; text-align: right; min-width: 80px;">+0 $</span>
@@ -2977,10 +2996,11 @@ async function envoyerCommandeFournisseur(idx, semaines){
       }
   }
 
-  const btn = document.getElementById('btn-po-' + idx);
+  const btn = document.getElementById('cpo-submit'); // 🚀 Updated to disable the modal button
   if(btn){ btn.disabled = true; btn.textContent = 'Envoi…'; }
 
-  const dateInput = document.getElementById('date-po-' + idx);
+  // 🚀 FIXED: Grab the date from the new modal input
+  const dateInput = document.getElementById('cpo-date');
   const dateLivraison = dateInput ? dateInput.value : '';
 
   // 🚀 NEW: SPLIT CUSTOM AND SHOPIFY LINES
@@ -3005,8 +3025,12 @@ async function envoyerCommandeFournisseur(idx, semaines){
   // SCENARIO B: MIXED LOGIC (Sends Shopify lines, glues custom lines onto PDF)
   // SCENARIO B: MIXED LOGIC (Sends Shopify lines, glues custom lines onto PDF)
   try {
-    const note = 'Commande créée depuis le dashboard - semaine(s) ' + sems.map(s=>'S'+String(s).padStart(2,'0')).join(', ') + (dejaEnvoyes.length?' (complément)':'');
-    const fournReel = fourn.replace(' (Café)', '').trim(); // 🚀 NEW: Strip tag before sending to Shopify
+    // 🚀 FIXED: Combine the auto-note with the user's custom note
+    const baseNote = 'Commande créée depuis le dashboard - semaine(s) ' + sems.map(s=>'S'+String(s).padStart(2,'0')).join(', ') + (dejaEnvoyes.length?' (complément)':'');
+    const customNote = document.getElementById('cpo-note') ? document.getElementById('cpo-note').value.trim() : '';
+    const note = customNote ? customNote + '\n\n' + baseNote : baseNote;
+    
+    const fournReel = fourn.replace(' (Café)', '').trim();
     const data = await envoyerLignesAuBackend(fournReel, note, lignesShopify, dateLivraison);
 
     if(data.success){
@@ -4046,7 +4070,7 @@ function fermerModalSansEquipe() {
 // ==========================================================
 function allerAuxReceptions(nomProduit) {
     // 1. Appuyer sur l'onglet Réceptions dans le menu de gauche
-    const btnReceptions = document.querySelectorAll('.ni')[5]; 
+    const btnReceptions = document.querySelectorAll('.ni')[4]; 
     if (btnReceptions) nav('receptions', btnReceptions);
 
     // 2. Coller le nom du produit dans la barre de recherche
@@ -4070,7 +4094,7 @@ function allerAuxReceptions(nomProduit) {
 // ==========================================================
 function allerAuxPromos(searchKey) {
     // 1. Appuyer sur l'onglet Promos dans le menu de gauche (Index 8)
-    const btnPromos = document.querySelectorAll('.ni')[8]; 
+    const btnPromos = document.querySelectorAll('.ni')[7]; 
     if (btnPromos) nav('promos', btnPromos);
 
     // 2. Forcer le filtre "En cours"
