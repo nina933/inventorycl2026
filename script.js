@@ -3366,9 +3366,16 @@ function retirerLigneManuelle(idx){
 }
 
 function majQuantiteManuelle(idx, val){
-  // 🚀 FIXED: Enforce whole numbers if the user types decimals manually
+  // 🚀 FIXED: Enforce whole numbers for quantities
   MANUAL_LINES[idx].quantite = Math.max(0, parseInt(val, 10) || 0); 
-  majTotalManuel();
+  // 🚀 FIXED: Redraw the entire line to force the visual totals to update
+  renderLignesManuelles(); 
+}
+
+// 🚀 NEW: Allow users to edit the Unit Price directly in the row
+function majPrixManuelle(idx, val){
+  MANUAL_LINES[idx].prixOverride = Math.max(0, parseFloat(val) || 0);
+  renderLignesManuelles();
 }
 
 function prixLigneManuelle(l){
@@ -3401,22 +3408,46 @@ function majTotalManuel(){
 
 function renderLignesManuelles(){
   const cont = document.getElementById('mc-lignes');
+  
   if(!MANUAL_LINES.length){
     cont.innerHTML = '<div style="text-align:center;padding:16px;color:var(--t3);font-size:12px;border:1px dashed var(--b1);border-radius:8px">Aucun produit ajouté</div>';
     majTotalManuel();
     return;
   }
-  cont.innerHTML = MANUAL_LINES.map((l, idx) => `
-    <div style="display:flex;align-items:center;gap:8px;padding:8px 0;border-bottom:1px solid var(--b1)">
+  
+  cont.innerHTML = MANUAL_LINES.map((l, idx) => {
+    const prixU = prixLigneManuelle(l);
+    const totalLigne = prixU * l.quantite;
+    
+    return `
+    <div style="display:flex;align-items:center;gap:10px;padding:8px 0;border-bottom:1px solid var(--b1)">
       <div style="flex:1">
-        <div style="font-size:12px;font-weight:500">${l.nom}</div>
+        <div style="font-size:13px;font-weight:500">${l.nom}</div>
         ${l.variante ? `<div style="font-size:11px;color:var(--t3)">${l.variante}</div>` : ''}
       </div>
-      <span style="font-size:11px;color:var(--t3);min-width:60px;text-align:right">${prixLigneManuelle(l)?fmtM(prixLigneManuelle(l)*l.quantite):'—'}</span>
-      <input type="number" min="0" value="${l.quantite}" oninput="majQuantiteManuelle(${idx},this.value)" style="width:60px;padding:4px 6px;border:1px solid var(--b2);border-radius:6px;font-size:12px">
-      <button class="rbtn" onclick="retirerLigneManuelle(${idx})" style="padding:3px 8px">✕</button>
+      
+      <!-- 🚀 NEW: Editable Unit Price Column (Accepts Decimals) -->
+      <div style="display:flex;flex-direction:column;gap:2px;align-items:flex-end;">
+        <span style="font-size:10px;color:var(--t3)">Prix unit.</span>
+        <input type="number" min="0" step="0.01" value="${prixU > 0 ? prixU.toFixed(2) : '0.00'}" onchange="majPrixManuelle(${idx},this.value)" style="width:65px;padding:4px;border:1px solid var(--b2);border-radius:6px;font-size:12px;text-align:right">
+      </div>
+
+      <!-- 🚀 NEW: Quantity Column (Strictly Whole Numbers) -->
+      <div style="display:flex;flex-direction:column;gap:2px;align-items:center;">
+        <span style="font-size:10px;color:var(--t3)">Qté</span>
+        <input type="number" min="0" step="1" value="${l.quantite}" onchange="majQuantiteManuelle(${idx},this.value)" style="width:50px;padding:4px;border:1px solid var(--b2);border-radius:6px;font-size:12px;text-align:center">
+      </div>
+      
+      <!-- 🚀 NEW: Dynamic Line Total Column -->
+      <div style="width:70px;text-align:right;font-size:12px;color:var(--br);font-weight:500;margin-top:14px;">
+        ${fmtM(totalLigne)}
+      </div>
+      
+      <button class="rbtn" onclick="retirerLigneManuelle(${idx})" style="padding:4px 8px; margin-top:14px; margin-left:4px;">✕</button>
     </div>
-  `).join('');
+    `;
+  }).join('');
+  
   majTotalManuel();
 }
 
