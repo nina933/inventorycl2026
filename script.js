@@ -322,7 +322,17 @@ async function loadData(){
   try {
     // 2. THE FETCH: The app literally "calls" the Google Sheet URL and asks for the data.
     setMsg('Chargement des données en live. Attendez un instant...');
-    const resp=await fetch(URL_AS);
+    let resp = await fetch(URL_AS);
+    
+    // 🚀 THE FIX: Silent Auto-Retry for Google's "Sleeping Server" 404 errors
+    let retries = 2;
+    while (!resp.ok && resp.status === 404 && retries > 0) {
+        retries--;
+        setMsg('Réveil du serveur Google... veuillez patienter.');
+        await new Promise(resolve => setTimeout(resolve, 1500)); // Pauses for 1.5 seconds
+        resp = await fetch(URL_AS); // Knocks on the door again silently
+    }
+
     if(!resp.ok)throw new Error('Erreur réseau: '+resp.status);
 
     // If it succeeds before 60 seconds, we clear the timer so it doesn't trigger anyway
@@ -624,11 +634,6 @@ async function loadData(){
         demandeCumulee+=fcMois>0?fcMois/4.33:0;      
       }
       
-      let statut;
-      if(stock<0) statut='rupture';
-      else if((stock+en_cmd)<demandeCumulee&&demandeCumulee>0) statut='critique';
-      else statut='active';
-
       const _r0=String(r[0]||'').trim().replace(/\s*\|\s*$/,'');
       const vn1=VN1_ID_MAP[idVariante]||VN1_MAP[nb]||VN1_MAP[nom]||VN1_MAP[_r0]||VN1_NORM[normKey(nb)]||VN1_NORM[normKey(nom)]||VN1_NORM[normKey(_r0)]||0;
       
@@ -638,9 +643,10 @@ async function loadData(){
       const cout_unitaire = COUT_MAP[idVariante] || COUT_MAP[normKey(nom)] || COUT_MAP[normKey(nb)] || 0;
       const vn1_months_array = VN1_MONTHLY_MAP[idVariante] || [0,0,0,0,0,0,0,0,0,0,0,0];
 
-      PRODS.push({nom,nb,variante:variante==='Default Title'?'':variante,fourn,statut,statut_produit,stock,pareto,
-      en_cmd,fc_m05:fc_cur,wks_left,demande_cumulee:demandeCumulee,vt:vd.total||0,vm:vd.moy||0,vc:vd.curV||0,sems:vd.sems||{},vn1,idVariante,skuFourn,
-      cout: cout_unitaire, id: idVariante, vn1_months: vn1_months_array, solde: stock + en_cmd}); // 🚀 FIXED: Injected solde for sorting
+      PRODS.push({nom,nb,variante:variante==='Default Title'?'':variante,fourn,statut_produit,stock,pareto,
+      en_cmd: 0, statut: 'active', solde: 0, // 🚀 Will be dynamically calculated later
+      fc_m05:fc_cur,wks_left,demande_cumulee:demandeCumulee,vt:vd.total||0,vm:vd.moy||0,vc:vd.curV||0,sems:vd.sems||{},vn1,idVariante,skuFourn,
+      cout: cout_unitaire, id: idVariante, vn1_months: vn1_months_array}); 
     });
 
     // 🚀 NEW: Sync the Mirage supplier names to the Forecast data
@@ -682,13 +688,17 @@ async function loadData(){
       const qty=n(r[6]||1);
       const com = rawNew ? fmtD(rawNew) : '';
       
+      // 🚀 FIXED: Grab the brand new Status from Column N (Index 13)
+      const statusLigne = String(r[13]||'').trim(); 
+
       byCmd[groupKey].lignes.push({
         nom: nomComplet,
         variante: String(r[2]||''),
         idVariante: String(r[3]||'').replace(/\D/g, ''), 
         qty,
         livraison: livraisonFmt,
-        com
+        com,
+        status: statusLigne // 🚀 Passes status down to the Receptions table logic!
       });
       byCmd[groupKey].total+=qty;
     });
@@ -742,6 +752,32 @@ async function loadData(){
       byCmdT[groupKey].total+=qty;
     });
     TRANSFERTS=Object.values(byCmdT).filter(c=>c.lignes.length>0).sort((a,b)=>b.cmd.localeCompare(a.cmd));
+// =================================================================
+    // 🚀 DYNAMIC "EN COMMANDE" CALCULATION
+    // =================================================================
+    // The dashboard calculates incoming stock internally, ignoring Google Sheet formulas!
+    
+    [...STOCKY, ...TRANSFERTS].forEach(order => {
+        order.lignes.forEach(l => {
+            // Only tally quantities that are actively in transit
+            if (l.status !== 'Reçu' && l.status !== 'Annulé' && l.qty > 0) {
+                const p = PRODS.find(x => x.idVariante === l.idVariante || normKey(x.nom) === normKey(l.nom));
+                if (p) p.en_cmd += l.qty;
+            }
+        });
+    });
+
+    // Now calculate the true Status and Solde using the accurate en_cmd
+    PRODS.forEach(p => {
+        if (p.stock < 0) {
+            p.statut = 'rupture';
+        } else if ((p.stock + p.en_cmd) < p.demande_cumulee && p.demande_cumulee > 0) {
+            p.statut = 'critique';
+        } else {
+            p.statut = 'active';
+        }
+        p.solde = p.stock + p.en_cmd;
+    });
 
 
     // Reconstruction de PO_ENVOYES 
@@ -862,7 +898,10 @@ async function loadData(){
     const W=cw();
     document.getElementById('tinfo').textContent=`Google Sheets · Live · S${W} · ${new Date().toLocaleDateString('fr-CA')}`;
     document.getElementById('tupd').textContent='MAJ '+new Date().toLocaleTimeString('fr-CA',{hour:'2-digit',minute:'2-digit'});
-    document.getElementById('nb-r').textContent=(STOCKY.filter(c=>!c.recu).length+TRANSFERTS.length)||'';
+    // 🚀 FIXED: Only count POs and Transfers that have at least one active, incoming item
+    const activeStocky = STOCKY.filter(c => c.lignes.some(l => l.status !== 'Reçu' && l.status !== 'Annulé' && l.qty > 0)).length;
+    const activeTransfers = TRANSFERTS.filter(c => c.lignes.some(l => l.status !== 'Reçu' && l.status !== 'Annulé' && l.qty > 0)).length;
+    document.getElementById('nb-r').textContent = (activeStocky + activeTransfers) || '';
     const crit=PRODS.filter(p=>p.statut==='critique').length;
     document.getElementById('nb-p').textContent=PROMOS.filter(p=>p.sd<=W&&p.sf>=W).length||'';
 
@@ -951,11 +990,16 @@ function populateFiltres(){
   if(swpr)swpr.innerHTML='<option value="">Toutes semaines</option>'+swOpts.join('');
 
   // Build the specific PO filter
+  // Build the specific PO filter
   const fpo=document.getElementById('f-po');
   if(fpo){
     const W2=cw();
     const pf=[...new Set(PREVISION.filter(r=>r.sems[W2]>0).map(r=>r.fourn).filter(Boolean))].sort();
-    fpo.innerHTML='<option value="">Tous fournisseurs actifs S'+String(W2).padStart(2,'0')+'</option>'+pf.map(f=>`<option>${f}</option>`).join('');
+    // 🚀 THE FIX: Add the non-active suppliers to the dropdown
+    const autres = FOURNISSEURS.filter(f => !pf.includes(f)).sort();
+    fpo.innerHTML='<option value="">Tous les fournisseurs</option>' +
+      '<optgroup label="Actifs (S'+String(W2).padStart(2,'0')+')">' + pf.map(f=>`<option>${f}</option>`).join('') + '</optgroup>' +
+      '<optgroup label="Autres">' + autres.map(f=>`<option>${f}</option>`).join('') + '</optgroup>';
   }
 
   // Build Promo filter
@@ -1680,9 +1724,14 @@ function rPO(){
   if(fpo){
     const fournsAvecPO=Object.keys(PO_ENVOYES).filter(f2=>equipeMatch(f2)&&(PO_ENVOYES[f2]||[]).some(e=>e.lignes.some(l=>l.quantite>0)));
     const activeFourns=[...new Set([...PREVISION.filter(r=>semaines.some(sw=>r.sems[sw]>0)&&equipeMatch(r.fourn)).map(r=>r.fourn).filter(Boolean),...fournsAvecPO])].sort();
-    fpo.innerHTML='<option value="">Tous fournisseurs actifs '+lblSem+'</option>'+activeFourns.map(f=>`<option${f===currentFourn?' selected':''}>${f}</option>`).join('');
+    
+    // 🚀 THE FIX: Fetch everyone else to make sure no brand is ever hidden
+    const autresFourns=FOURNISSEURS.filter(f=>equipeMatch(f) && !activeFourns.includes(f)).sort();
+    
+    fpo.innerHTML='<option value="">Tous les fournisseurs</option>' +
+      '<optgroup label="Actifs ('+lblSem+')">' + activeFourns.map(f=>`<option${f===currentFourn?' selected':''}>${f}</option>`).join('') + '</optgroup>' +
+      '<optgroup label="Autres fournisseurs">' + autresFourns.map(f=>`<option${f===currentFourn?' selected':''}>${f}</option>`).join('') + '</optgroup>';
   }
-  
   const fourn=fpo?.value||'';
 
   const rowsCalc=PREVISION.filter(r=>{
@@ -1903,13 +1952,22 @@ function rPO(){
   }
 
   const aDesPOEnvoyesVisibles = Object.keys(PO_ENVOYES).some(f2=>equipeMatch(f2)&&(!fourn||f2===fourn)&&(PO_ENVOYES[f2]||[]).some(e=>e.lignes.some(l=>l.quantite>0)));
-  if(!rows.length && !Object.keys(byFournHP).length && !aDesPOEnvoyesVisibles){document.getElementById('po-cont').innerHTML='<div style="text-align:center;padding:50px;color:var(--t3)">Aucune prévision pour cette période</div>';return;}
+  
+  // 🚀 FIXED: Only abort if no supplier is explicitly selected. Otherwise, render a blank builder!
+  if(!fourn && !rows.length && !Object.keys(byFournHP).length && !aDesPOEnvoyesVisibles){
+      document.getElementById('po-cont').innerHTML='<div style="text-align:center;padding:50px;color:var(--t3)">Aucune prévision pour cette période</div>';
+      return;
+  }
+  
   const minW=semaines[0],maxW=semaines[semaines.length-1];
   const wks=[];for(let i=minW;i<=Math.min(52,maxW+2);i++)wks.push(i);
   const byF={};
   rows.forEach(r=>{if(!byF[r.fourn])byF[r.fourn]=[];byF[r.fourn].push(r);});
   
-  const tousFourns=[...new Set([...Object.keys(byF),...Object.keys(byFournHP)])].sort((a,b)=>a.localeCompare(b));
+  // 🚀 FIXED: Force the selected supplier into the render loop even if they have 0 stock needs
+  let tousFourns=[...new Set([...Object.keys(byF),...Object.keys(byFournHP)])];
+  if (fourn && !tousFourns.includes(fourn)) tousFourns.push(fourn);
+  tousFourns.sort((a,b)=>a.localeCompare(b));
   let html='';
   
   // 🚀 FIX: Update PO_GROUPES to include ALL suppliers (even if they only have yellow box items)
@@ -3830,7 +3888,8 @@ function rScanback() {
                 // Si la commande tombe dans le mois et l'année sélectionnés
                 if (d.getFullYear() === targetYear && d.getMonth() === targetMonth) {
                     c.lignes.forEach(l => {
-                        if (l.idVariante) {
+                        // 🚀 THE FIX: Only count units if they successfully arrived! Ignores Annulé/En transit.
+                        if (l.idVariante && l.status === 'Reçu') {
                             recuParId[l.idVariante] = (recuParId[l.idVariante] || 0) + (l.qty || 0);
                         }
                     });
@@ -3969,7 +4028,7 @@ function rMapping() {
             <td style="font-family:monospace;color:var(--re);font-weight:600;">${r.ancien}</td>
             <td style="font-family:monospace;color:var(--gr);font-weight:600;">${r.nouveau}</td>
         </tr>
-    `).join('') || `<tr><td colspan="4" style="text-align:center;padding:40px;color:var(--t3)">Aucun mapping enregistré (Vérifiez le backend)</td></tr>`;
+    `).join('') || `<tr><td colspan="5" style="text-align:center;padding:40px;color:var(--t3)">Aucun mapping enregistré</td></tr>`;
 }
 
 async function enregistrerMapping() {
@@ -3978,7 +4037,8 @@ async function enregistrerMapping() {
     const nom = document.getElementById('map-nom').value.trim();
     const variante = document.getElementById('map-var').value.trim();
     
-    if(!ancien || !nouveau || !nom) {
+    // 🚀 FIXED: Removed '!fournisseur' so the code doesn't crash looking for a deleted variable
+    if(!ancien || !nouveau || !nom) { 
         alert("⚠️ Veuillez remplir l'Ancien ID, le Nouvel ID et le Nom du produit.");
         return;
     }
@@ -3993,7 +4053,7 @@ async function enregistrerMapping() {
             ancien: ancien,
             nouveau: nouveau,
             nom: nom,
-            variante: variante
+            variante: variante,
         };
         
         const resp = await fetch(URL_AS, {
