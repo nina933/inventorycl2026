@@ -322,7 +322,17 @@ async function loadData(){
   try {
     // 2. THE FETCH: The app literally "calls" the Google Sheet URL and asks for the data.
     setMsg('Chargement des données en live. Attendez un instant...');
-    const resp=await fetch(URL_AS);
+    let resp = await fetch(URL_AS);
+    
+    // 🚀 THE FIX: Silent Auto-Retry for Google's "Sleeping Server" 404 errors
+    let retries = 2;
+    while (!resp.ok && resp.status === 404 && retries > 0) {
+        retries--;
+        setMsg('Réveil du serveur Google... veuillez patienter.');
+        await new Promise(resolve => setTimeout(resolve, 1500)); // Pauses for 1.5 seconds
+        resp = await fetch(URL_AS); // Knocks on the door again silently
+    }
+
     if(!resp.ok)throw new Error('Erreur réseau: '+resp.status);
 
     // If it succeeds before 60 seconds, we clear the timer so it doesn't trigger anyway
@@ -624,11 +634,6 @@ async function loadData(){
         demandeCumulee+=fcMois>0?fcMois/4.33:0;      
       }
       
-      let statut;
-      if(stock<0) statut='rupture';
-      else if((stock+en_cmd)<demandeCumulee&&demandeCumulee>0) statut='critique';
-      else statut='active';
-
       const _r0=String(r[0]||'').trim().replace(/\s*\|\s*$/,'');
       const vn1=VN1_ID_MAP[idVariante]||VN1_MAP[nb]||VN1_MAP[nom]||VN1_MAP[_r0]||VN1_NORM[normKey(nb)]||VN1_NORM[normKey(nom)]||VN1_NORM[normKey(_r0)]||0;
       
@@ -638,9 +643,10 @@ async function loadData(){
       const cout_unitaire = COUT_MAP[idVariante] || COUT_MAP[normKey(nom)] || COUT_MAP[normKey(nb)] || 0;
       const vn1_months_array = VN1_MONTHLY_MAP[idVariante] || [0,0,0,0,0,0,0,0,0,0,0,0];
 
-      PRODS.push({nom,nb,variante:variante==='Default Title'?'':variante,fourn,statut,statut_produit,stock,pareto,
-      en_cmd,fc_m05:fc_cur,wks_left,demande_cumulee:demandeCumulee,vt:vd.total||0,vm:vd.moy||0,vc:vd.curV||0,sems:vd.sems||{},vn1,idVariante,skuFourn,
-      cout: cout_unitaire, id: idVariante, vn1_months: vn1_months_array});
+      PRODS.push({nom,nb,variante:variante==='Default Title'?'':variante,fourn,statut_produit,stock,pareto,
+      en_cmd: 0, statut: 'active', solde: 0, // 🚀 Will be dynamically calculated later
+      fc_m05:fc_cur,wks_left,demande_cumulee:demandeCumulee,vt:vd.total||0,vm:vd.moy||0,vc:vd.curV||0,sems:vd.sems||{},vn1,idVariante,skuFourn,
+      cout: cout_unitaire, id: idVariante, vn1_months: vn1_months_array}); 
     });
 
     // 🚀 NEW: Sync the Mirage supplier names to the Forecast data
@@ -682,13 +688,17 @@ async function loadData(){
       const qty=n(r[6]||1);
       const com = rawNew ? fmtD(rawNew) : '';
       
+      // 🚀 FIXED: Grab the brand new Status from Column N (Index 13)
+      const statusLigne = String(r[13]||'').trim(); 
+
       byCmd[groupKey].lignes.push({
         nom: nomComplet,
         variante: String(r[2]||''),
         idVariante: String(r[3]||'').replace(/\D/g, ''), 
         qty,
         livraison: livraisonFmt,
-        com
+        com,
+        status: statusLigne // 🚀 Passes status down to the Receptions table logic!
       });
       byCmd[groupKey].total+=qty;
     });
@@ -742,6 +752,32 @@ async function loadData(){
       byCmdT[groupKey].total+=qty;
     });
     TRANSFERTS=Object.values(byCmdT).filter(c=>c.lignes.length>0).sort((a,b)=>b.cmd.localeCompare(a.cmd));
+// =================================================================
+    // 🚀 DYNAMIC "EN COMMANDE" CALCULATION
+    // =================================================================
+    // The dashboard calculates incoming stock internally, ignoring Google Sheet formulas!
+    
+    [...STOCKY, ...TRANSFERTS].forEach(order => {
+        order.lignes.forEach(l => {
+            // Only tally quantities that are actively in transit
+            if (l.status !== 'Reçu' && l.status !== 'Annulé' && l.qty > 0) {
+                const p = PRODS.find(x => x.idVariante === l.idVariante || normKey(x.nom) === normKey(l.nom));
+                if (p) p.en_cmd += l.qty;
+            }
+        });
+    });
+
+    // Now calculate the true Status and Solde using the accurate en_cmd
+    PRODS.forEach(p => {
+        if (p.stock < 0) {
+            p.statut = 'rupture';
+        } else if ((p.stock + p.en_cmd) < p.demande_cumulee && p.demande_cumulee > 0) {
+            p.statut = 'critique';
+        } else {
+            p.statut = 'active';
+        }
+        p.solde = p.stock + p.en_cmd;
+    });
 
 
     // Reconstruction de PO_ENVOYES 
@@ -862,7 +898,10 @@ async function loadData(){
     const W=cw();
     document.getElementById('tinfo').textContent=`Google Sheets · Live · S${W} · ${new Date().toLocaleDateString('fr-CA')}`;
     document.getElementById('tupd').textContent='MAJ '+new Date().toLocaleTimeString('fr-CA',{hour:'2-digit',minute:'2-digit'});
-    document.getElementById('nb-r').textContent=(STOCKY.filter(c=>!c.recu).length+TRANSFERTS.length)||'';
+    // 🚀 FIXED: Only count POs and Transfers that have at least one active, incoming item
+    const activeStocky = STOCKY.filter(c => c.lignes.some(l => l.status !== 'Reçu' && l.status !== 'Annulé' && l.qty > 0)).length;
+    const activeTransfers = TRANSFERTS.filter(c => c.lignes.some(l => l.status !== 'Reçu' && l.status !== 'Annulé' && l.qty > 0)).length;
+    document.getElementById('nb-r').textContent = (activeStocky + activeTransfers) || '';
     const crit=PRODS.filter(p=>p.statut==='critique').length;
     document.getElementById('nb-p').textContent=PROMOS.filter(p=>p.sd<=W&&p.sf>=W).length||'';
 
@@ -951,11 +990,16 @@ function populateFiltres(){
   if(swpr)swpr.innerHTML='<option value="">Toutes semaines</option>'+swOpts.join('');
 
   // Build the specific PO filter
+  // Build the specific PO filter
   const fpo=document.getElementById('f-po');
   if(fpo){
     const W2=cw();
     const pf=[...new Set(PREVISION.filter(r=>r.sems[W2]>0).map(r=>r.fourn).filter(Boolean))].sort();
-    fpo.innerHTML='<option value="">Tous fournisseurs actifs S'+String(W2).padStart(2,'0')+'</option>'+pf.map(f=>`<option>${f}</option>`).join('');
+    // 🚀 THE FIX: Add the non-active suppliers to the dropdown
+    const autres = FOURNISSEURS.filter(f => !pf.includes(f)).sort();
+    fpo.innerHTML='<option value="">Tous les fournisseurs</option>' +
+      '<optgroup label="Actifs (S'+String(W2).padStart(2,'0')+')">' + pf.map(f=>`<option>${f}</option>`).join('') + '</optgroup>' +
+      '<optgroup label="Autres">' + autres.map(f=>`<option>${f}</option>`).join('') + '</optgroup>';
   }
 
   // Build Promo filter
@@ -1133,7 +1177,7 @@ function rAlertes(){
     <div class="mc" onclick="clearDD('dd-pa','pa',null);clearDD('dd-fa','fa',null);sC('sta',['rupture']);updDD('dd-sta','sta');rAlertes()"><div class="mcl">Ruptures (stock=0)</div><div class="mcv r">${fmt(ruptures)}</div><div class="mcs">↗ Cliquer pour voir</div></div>
     <div class="mc" onclick="clearDD('dd-pa','pa',null);clearDD('dd-fa','fa',null);sC('sta',['critique']);updDD('dd-sta','sta');rAlertes()"><div class="mcl">Critique</div><div class="mcv a">${fmt(crit)}</div><div class="mcs">↗ Cliquer pour voir</div></div>
     <div class="mc" onclick="clearDD('dd-sta','sta',null);clearDD('dd-fa','fa',null);sC('pa',['A']);updDD('dd-pa','pa');rAlertes()"><div class="mcl">Alertes Pareto A</div><div class="mcv b">${fmt(pa)}</div><div class="mcs">↗ Cliquer pour voir</div></div>
-    <div class="mc" onclick="nav('receptions',document.querySelectorAll('.ni')[5])"><div class="mcl">Réceptions en cours</div><div class="mcv g">${fmt(STOCKY.length)}</div><div class="mcs">↗ Voir les commandes</div></div>`;
+    <div class="mc" onclick="nav('receptions',document.querySelectorAll('.ni')[4])"><div class="mcl">Réceptions en cours</div><div class="mcv g">${fmt(STOCKY.length)}</div><div class="mcs">↗ Voir les commandes</div></div>`;
   
   document.getElementById('nb-a').textContent=rows.length||'';
   document.getElementById('rc-a').textContent=rows.length+' produit(s)';
@@ -1613,6 +1657,10 @@ function ouvrirConfirmPO(idx, semaines) {
     document.getElementById('cpo-lignes').innerHTML = alertHtml + lignesHtml;
     document.getElementById('cpo-total').textContent = `Total : ${fmtM(totalCost)}`;
 
+    // 🚀 NEW: Clear previous dates and notes
+    document.getElementById('cpo-date').value = '';
+    document.getElementById('cpo-note').value = '';
+
     CONFIRM_PO_CTX = { idx, semaines };
     document.getElementById('modal-confirm-po').style.display = 'flex';
 }
@@ -1627,6 +1675,36 @@ function validerConfirmPO() {
     const { idx, semaines } = CONFIRM_PO_CTX;
     fermerConfirmPO();
     envoyerCommandeFournisseur(idx, semaines); // Déclenche le vrai payload
+}
+
+// 🚀 NEW: Generate a Draft PDF directly from the confirmation modal
+function telechargerPDFConfirmPO() {
+    if (!CONFIRM_PO_CTX) return;
+    const { idx, semaines } = CONFIRM_PO_CTX;
+    const sems = Array.isArray(semaines) ? semaines : [semaines];
+    const grp = window.PO_GROUPES[idx];
+    if(!grp) return;
+    
+    const [fourn, prods] = grp;
+
+    const lignes = prods.map(r => {
+        const p = PRODS.find(x => x.nom === r.nom);
+        const targetId = r._custom ? r.customId : (r.idVariante || (p ? p.idVariante : ''));
+        return {
+            nom: r.nom,
+            variante: r._custom ? r.variante : (p && p.variante ? p.variante : ''),
+            sku: SKU_OVERRIDE_TEMP[targetId] !== undefined ? SKU_OVERRIDE_TEMP[targetId] : (p && p.skuFourn ? p.skuFourn : ''),
+            qte: sems.reduce((s, sw) => s + (r.sems[sw] || 0), 0),
+            prix: r.prix || 0
+        };
+    }).filter(l => l.qte > 0);
+
+    const rawDate = document.getElementById('cpo-date').value;
+    const dateFmt = rawDate 
+        ? new Date(rawDate + 'T00:00:00').toLocaleDateString('fr-CA', {day:'numeric', month:'long', year:'numeric'}) 
+        : '-';
+
+    ouvrirDocumentPO(fourn, "Brouillon", dateFmt, lignes);
 }
 
 // -----------------------------------------------------------------
@@ -1646,9 +1724,14 @@ function rPO(){
   if(fpo){
     const fournsAvecPO=Object.keys(PO_ENVOYES).filter(f2=>equipeMatch(f2)&&(PO_ENVOYES[f2]||[]).some(e=>e.lignes.some(l=>l.quantite>0)));
     const activeFourns=[...new Set([...PREVISION.filter(r=>semaines.some(sw=>r.sems[sw]>0)&&equipeMatch(r.fourn)).map(r=>r.fourn).filter(Boolean),...fournsAvecPO])].sort();
-    fpo.innerHTML='<option value="">Tous fournisseurs actifs '+lblSem+'</option>'+activeFourns.map(f=>`<option${f===currentFourn?' selected':''}>${f}</option>`).join('');
+    
+    // 🚀 THE FIX: Fetch everyone else to make sure no brand is ever hidden
+    const autresFourns=FOURNISSEURS.filter(f=>equipeMatch(f) && !activeFourns.includes(f)).sort();
+    
+    fpo.innerHTML='<option value="">Tous les fournisseurs</option>' +
+      '<optgroup label="Actifs ('+lblSem+')">' + activeFourns.map(f=>`<option${f===currentFourn?' selected':''}>${f}</option>`).join('') + '</optgroup>' +
+      '<optgroup label="Autres fournisseurs">' + autresFourns.map(f=>`<option${f===currentFourn?' selected':''}>${f}</option>`).join('') + '</optgroup>';
   }
-  
   const fourn=fpo?.value||'';
 
   const rowsCalc=PREVISION.filter(r=>{
@@ -1869,43 +1952,22 @@ function rPO(){
   }
 
   const aDesPOEnvoyesVisibles = Object.keys(PO_ENVOYES).some(f2=>equipeMatch(f2)&&(!fourn||f2===fourn)&&(PO_ENVOYES[f2]||[]).some(e=>e.lignes.some(l=>l.quantite>0)));
-  if(!rows.length && !Object.keys(byFournHP).length && !aDesPOEnvoyesVisibles){document.getElementById('po-cont').innerHTML='<div style="text-align:center;padding:50px;color:var(--t3)">Aucune prévision pour cette période</div>';return;}
+  
+  // 🚀 FIXED: Only abort if no supplier is explicitly selected. Otherwise, render a blank builder!
+  if(!fourn && !rows.length && !Object.keys(byFournHP).length && !aDesPOEnvoyesVisibles){
+      document.getElementById('po-cont').innerHTML='<div style="text-align:center;padding:50px;color:var(--t3)">Aucune prévision pour cette période</div>';
+      return;
+  }
+  
   const minW=semaines[0],maxW=semaines[semaines.length-1];
   const wks=[];for(let i=minW;i<=Math.min(52,maxW+2);i++)wks.push(i);
   const byF={};
   rows.forEach(r=>{if(!byF[r.fourn])byF[r.fourn]=[];byF[r.fourn].push(r);});
   
-  Object.keys(PO_ENVOYES).forEach(f2=>{
-    if(!equipeMatch(f2))return;
-    if (fourn && f2 !== fourn && f2 !== fourn + ' (Café)') return;
-    const idVDejaDansByF=new Set((byF[f2]||[]).map(r=>r.idVariante||(PRODS.find(x=>x.nom===r.nom)?.idVariante||'')));
-    const idVCommittes=new Set((PO_ENVOYES[f2]||[]).flatMap(e=>e.lignes.map(l=>l.idVariante)));
-    
-    idVCommittes.forEach(idV=>{
-      // Prevent empty IDs (shipping fees/ghost items) from being resurrected
-      if(!idV) return;
-      
-      if(idVDejaDansByF.has(idV))return;
-
-      // NOUVEAU: Si l'utilisateur l'a masqué, on ignore l'injection.
-      if(PO_IGNORED[f2] && PO_IGNORED[f2].includes(idV)) return;
-
-      const p=PRODS.find(x=>x.idVariante===idV);
-      if(!p)return;
-      if(!byF[f2])byF[f2]=[];
-      
-      // 🚀 FIXED: Grab existing quantities from PREVISION instead of wiping them out with an empty {}
-      let existingPrev = PREVISION.find(x => x.idVariante === idV);
-      let currentSems = existingPrev ? Object.assign({}, existingPrev.sems) : {};
-
-      byF[f2].push({nom:p.nom,fourn:f2,cat:p.pareto||'C',delai:DELAIS_MAP[f2]||0,
-        prix:PRIX_ID_MAP[idV]||PRIX_MAP[normKey(p.nom)]||PRIX_FALLBACK_ID[idV]||0,
-        vm:p.vm||0,tc:0,sems:currentSems,idVariante:idV});
-      idVDejaDansByF.add(idV);
-    });
-  });
-  
-  const tousFourns=[...new Set([...Object.keys(byF),...Object.keys(byFournHP)])].sort((a,b)=>a.localeCompare(b));
+  // 🚀 FIXED: Force the selected supplier into the render loop even if they have 0 stock needs
+  let tousFourns=[...new Set([...Object.keys(byF),...Object.keys(byFournHP)])];
+  if (fourn && !tousFourns.includes(fourn)) tousFourns.push(fourn);
+  tousFourns.sort((a,b)=>a.localeCompare(b));
   let html='';
   
   // 🚀 FIX: Update PO_GROUPES to include ALL suppliers (even if they only have yellow box items)
@@ -2168,7 +2230,7 @@ function toggleBudget(sn,label,total){
 function navPO(el){
   const fourn=el?el.dataset.fourn.replace(/&#39;/g,"'"):arguments[0];
   const sw=el?+el.dataset.sw:arguments[1];
-  const ni=document.querySelectorAll('.ni')[7];
+  const ni=document.querySelectorAll('.ni')[5];
   
   document.querySelectorAll('.ni').forEach(e=>e.classList.remove('on'));
   ni.classList.add('on');
@@ -2586,13 +2648,26 @@ function exportDormantCSV() {
 // ==========================================================
 
 // NEW HELPER: Calculates the custom profit in real-time as the user types
-function majSimulationPersonnalisee(qte, profitUnitaire) {
+function majSimulationPersonnalisee(qte, profitUnitaire, baseProfit) {
     const resultEl = document.getElementById('custom-profit-result');
+    const grandTotalEl = document.getElementById('grand-total-profit');
+    const grandTotalContainer = document.getElementById('grand-total-container');
     if (!resultEl) return;
     
-    const val = (parseInt(qte) || 0) * profitUnitaire;
-    resultEl.textContent = (val > 0 ? '+' : '') + fmtM(val);
-    resultEl.style.color = val >= 0 ? 'var(--gr)' : 'var(--re)';
+    // Calculate the extra profit from the custom box
+    const parsedQte = parseInt(qte, 10);
+    const customProfit = (isNaN(parsedQte) ? 0 : parsedQte) * profitUnitaire;
+    
+    resultEl.textContent = (customProfit > 0 ? '+' : '') + fmtM(customProfit);
+    resultEl.style.color = customProfit >= 0 ? 'var(--gr)' : 'var(--re)';
+
+    // 🚀 NEW: Combine base profit with extra profit and update the big number at the top!
+    if (grandTotalEl && grandTotalContainer) {
+        const grandTotal = baseProfit + customProfit;
+        const sign = grandTotal > 0 ? '+' : '';
+        grandTotalEl.textContent = sign + fmtM(grandTotal);
+        grandTotalContainer.style.color = grandTotal >= 0 ? 'var(--gr)' : 'var(--re)';
+    }
 }
 
 function simulerLigne(targetId, capitalDisponible) {
@@ -2678,7 +2753,7 @@ function simulerLigne(targetId, capitalDisponible) {
     }
 
     // 5. Math Step 3: Constraint Logic (Pick the lower number to be safe)
-    const finalSimulatedUnitsSold = Math.min(simulatedUnitsPurchased, demandCeiling);
+    const finalSimulatedUnitsSold = simulatedUnitsPurchased;
     
     // 6. Math Step 4: Final Profit Calculation
     const finalProjectedGrossProfit = finalSimulatedUnitsSold * profitPerUnit;
@@ -2697,9 +2772,10 @@ function simulerLigne(targetId, capitalDisponible) {
     const sign = isProfitable ? '+' : '';
 
     receiptContent.innerHTML = `
-        <div class="receipt-total" style="color: ${profitColor};">
-            ${sign}${fmtM(finalProjectedGrossProfit)} 
-            <span style="font-size: 11px; font-weight: normal; color: var(--t3);">Profit Brut Projeté</span>
+        <!-- 🚀 FIXED: Added IDs so the script can target and colorize the Grand Total -->
+        <div class="receipt-total" id="grand-total-container" style="color: ${profitColor}; transition: color 0.2s ease;">
+            <span id="grand-total-profit">${sign}${fmtM(finalProjectedGrossProfit)}</span> 
+            <span style="font-size: 11px; font-weight: normal; color: var(--t3); margin-left: 8px;">Profit Brut Projeté</span>
         </div>
         <ul class="receipt-list">
             <li class="receipt-item">
@@ -2713,9 +2789,9 @@ function simulerLigne(targetId, capitalDisponible) {
                 <span class="receipt-source">${demandSourceLabel}</span>
             </li>
             <li class="receipt-item">
-                <strong>3. Ventes retenues :</strong> 
-                <span>La simulation limite à <span class="em">${fmt(finalSimulatedUnitsSold)} unités</span></span>
-                <span class="receipt-source">Le plus bas de 1 ou 2</span>
+                <strong>3. Ventes simulées :</strong> 
+                <span>La simulation utilise <span class="em">${fmt(finalSimulatedUnitsSold)} unités</span></span>
+                <span class="receipt-source">Limité par le capital</span>
             </li>
             <li class="receipt-item">
                 <strong>4. Marge unitaire :</strong> 
@@ -2727,9 +2803,10 @@ function simulerLigne(targetId, capitalDisponible) {
               <div style="display: flex; align-items: center; gap: 12px; flex-wrap: wrap;">
                 <strong>Simulation Custom :</strong>
                 <div style="display:flex; align-items: center; gap: 8px; font-size: 12px;">
-                <span>Si j'achète</span>
-                <input type="number" min="0" placeholder="0" style="width: 70px; padding: 4px; border: 1px solid var(--b2); border-radius: 4px; font-size: 12px; text-align: center;" oninput="majSimulationPersonnalisee(this.value, ${profitPerUnit})">
-                <span>unités</span>
+                <span>Si j'ajoute</span>
+                <!-- 🚀 FIXED: Passed the base profit into the oninput trigger -->
+                <input type="number" min="0" placeholder="0" style="width: 70px; padding: 4px; border: 1px solid var(--b2); border-radius: 4px; font-size: 12px; text-align: center;" oninput="majSimulationPersonnalisee(this.value, ${profitPerUnit}, ${finalProjectedGrossProfit})">
+                <span>unités en plus</span>
                 </div>
                 </div>
                 <span id="custom-profit-result" style="color: var(--gr); font-weight: 700; font-size: 14px; text-align: right; min-width: 80px;">+0 $</span>
@@ -2977,10 +3054,11 @@ async function envoyerCommandeFournisseur(idx, semaines){
       }
   }
 
-  const btn = document.getElementById('btn-po-' + idx);
+  const btn = document.getElementById('cpo-submit'); // 🚀 Updated to disable the modal button
   if(btn){ btn.disabled = true; btn.textContent = 'Envoi…'; }
 
-  const dateInput = document.getElementById('date-po-' + idx);
+  // 🚀 FIXED: Grab the date from the new modal input
+  const dateInput = document.getElementById('cpo-date');
   const dateLivraison = dateInput ? dateInput.value : '';
 
   // 🚀 NEW: SPLIT CUSTOM AND SHOPIFY LINES
@@ -3005,8 +3083,12 @@ async function envoyerCommandeFournisseur(idx, semaines){
   // SCENARIO B: MIXED LOGIC (Sends Shopify lines, glues custom lines onto PDF)
   // SCENARIO B: MIXED LOGIC (Sends Shopify lines, glues custom lines onto PDF)
   try {
-    const note = 'Commande créée depuis le dashboard - semaine(s) ' + sems.map(s=>'S'+String(s).padStart(2,'0')).join(', ') + (dejaEnvoyes.length?' (complément)':'');
-    const fournReel = fourn.replace(' (Café)', '').trim(); // 🚀 NEW: Strip tag before sending to Shopify
+    // 🚀 FIXED: Combine the auto-note with the user's custom note
+    const baseNote = 'Commande créée depuis le dashboard - semaine(s) ' + sems.map(s=>'S'+String(s).padStart(2,'0')).join(', ') + (dejaEnvoyes.length?' (complément)':'');
+    const customNote = document.getElementById('cpo-note') ? document.getElementById('cpo-note').value.trim() : '';
+    const note = customNote ? customNote + '\n\n' + baseNote : baseNote;
+    
+    const fournReel = fourn.replace(' (Café)', '').trim();
     const data = await envoyerLignesAuBackend(fournReel, note, lignesShopify, dateLivraison);
 
     if(data.success){
@@ -3806,7 +3888,8 @@ function rScanback() {
                 // Si la commande tombe dans le mois et l'année sélectionnés
                 if (d.getFullYear() === targetYear && d.getMonth() === targetMonth) {
                     c.lignes.forEach(l => {
-                        if (l.idVariante) {
+                        // 🚀 THE FIX: Only count units if they successfully arrived! Ignores Annulé/En transit.
+                        if (l.idVariante && l.status === 'Reçu') {
                             recuParId[l.idVariante] = (recuParId[l.idVariante] || 0) + (l.qty || 0);
                         }
                     });
@@ -3945,7 +4028,7 @@ function rMapping() {
             <td style="font-family:monospace;color:var(--re);font-weight:600;">${r.ancien}</td>
             <td style="font-family:monospace;color:var(--gr);font-weight:600;">${r.nouveau}</td>
         </tr>
-    `).join('') || `<tr><td colspan="4" style="text-align:center;padding:40px;color:var(--t3)">Aucun mapping enregistré (Vérifiez le backend)</td></tr>`;
+    `).join('') || `<tr><td colspan="5" style="text-align:center;padding:40px;color:var(--t3)">Aucun mapping enregistré</td></tr>`;
 }
 
 async function enregistrerMapping() {
@@ -3954,7 +4037,8 @@ async function enregistrerMapping() {
     const nom = document.getElementById('map-nom').value.trim();
     const variante = document.getElementById('map-var').value.trim();
     
-    if(!ancien || !nouveau || !nom) {
+    // 🚀 FIXED: Removed '!fournisseur' so the code doesn't crash looking for a deleted variable
+    if(!ancien || !nouveau || !nom) { 
         alert("⚠️ Veuillez remplir l'Ancien ID, le Nouvel ID et le Nom du produit.");
         return;
     }
@@ -3969,7 +4053,7 @@ async function enregistrerMapping() {
             ancien: ancien,
             nouveau: nouveau,
             nom: nom,
-            variante: variante
+            variante: variante,
         };
         
         const resp = await fetch(URL_AS, {
@@ -4046,7 +4130,7 @@ function fermerModalSansEquipe() {
 // ==========================================================
 function allerAuxReceptions(nomProduit) {
     // 1. Appuyer sur l'onglet Réceptions dans le menu de gauche
-    const btnReceptions = document.querySelectorAll('.ni')[5]; 
+    const btnReceptions = document.querySelectorAll('.ni')[4]; 
     if (btnReceptions) nav('receptions', btnReceptions);
 
     // 2. Coller le nom du produit dans la barre de recherche
@@ -4070,7 +4154,7 @@ function allerAuxReceptions(nomProduit) {
 // ==========================================================
 function allerAuxPromos(searchKey) {
     // 1. Appuyer sur l'onglet Promos dans le menu de gauche (Index 8)
-    const btnPromos = document.querySelectorAll('.ni')[8]; 
+    const btnPromos = document.querySelectorAll('.ni')[7]; 
     if (btnPromos) nav('promos', btnPromos);
 
     // 2. Forcer le filtre "En cours"

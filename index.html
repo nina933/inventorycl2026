@@ -95,9 +95,10 @@
           <th onclick="srt('a','stock',this)" style="text-align:right">Stock</th>
           <th onclick="srt('a','statut',this)">Statut</th>
           <th onclick="srt('a','weeks_left',this)" style="text-align:right">Sem. rest.</th>
-          <th style="text-align:right">En commande</th>
-          <th style="text-align:right" id="th-fc-a">Forecast M06</th>
-          <th style="text-align:right">Solde</th>
+          <!-- 🚀 FIXED: Added onclick sorting for En commande, Forecast, and Solde -->
+          <th style="text-align:right" onclick="srt('a','en_cmd',this)">En commande</th>
+          <th style="text-align:right" onclick="srt('a','fc_m05',this)" id="th-fc-a">Forecast M06</th>
+          <th style="text-align:right" onclick="srt('a','solde',this)">Solde</th>
         </tr></thead>
         <tbody id="tb-a"></tbody>
       </table></div>
@@ -119,9 +120,10 @@
           <th onclick="srt('s','stock',this)" style="text-align:right">Stock</th>
           <th onclick="srt('s','statut',this)">Statut</th>
           <th onclick="srt('s','wks_left',this)" style="text-align:right">Sem. rest.</th>
-          <th style="text-align:right">En commande</th>
-          <th style="text-align:right" id="th-fc-s">Forecast M06</th>
-          <th style="text-align:right">Solde</th>
+          <!-- 🚀 FIXED: Added onclick sorting for En commande, Forecast, and Solde -->
+          <th style="text-align:right" onclick="srt('s','en_cmd',this)">En commande</th>
+          <th style="text-align:right" onclick="srt('s','fc_m05',this)" id="th-fc-s">Forecast M06</th>
+          <th style="text-align:right" onclick="srt('s','solde',this)">Solde</th>
         </tr></thead>
         <tbody id="tb-s"></tbody>
       </table></div>
@@ -360,11 +362,11 @@
       <div style="background:var(--w);border:1px solid var(--b1);border-radius:10px;padding:16px;margin-bottom:16px;">
         <div style="font-size:12px;font-weight:600;margin-bottom:10px;color:var(--t2);">Lier un ancien ID orphelin à un nouvel ID Shopify</div>
         <div style="display:flex;gap:10px;align-items:center;flex-wrap:wrap;">
-          <input type="text" id="map-old" class="fin" placeholder="Ancien ID (ex: 41234...)" style="flex:1;min-width:140px;">
+          <input type="text" id="map-old" class="fin" placeholder="Ancien ID" style="flex:1;min-width:120px;">
           <span style="color:var(--t3);font-weight:bold;">→</span>
-          <input type="text" id="map-new" class="fin" placeholder="Nouvel ID (ex: 49876...)" style="flex:1;min-width:140px;">
+          <input type="text" id="map-new" class="fin" placeholder="Nouvel ID" style="flex:1;min-width:120px;">
           <input type="text" id="map-nom" class="fin" placeholder="Nom du produit" style="flex:1.5;min-width:160px;">
-          <input type="text" id="map-var" class="fin" placeholder="Variante (optionnel)" style="flex:1;min-width:120px;">
+          <input type="text" id="map-var" class="fin" placeholder="Variante" style="flex:1;min-width:100px;">
           <button class="fb on" id="btn-save-map" onclick="enregistrerMapping()" style="padding:6px 16px;">Lier les IDs</button>
         </div>
       </div>
@@ -414,28 +416,44 @@
 
 <!-- NOUVEAU: MODAL DE CONFIRMATION DE COMMANDE -->
 <div id="modal-confirm-po" style="display:none;position:fixed;inset:0;background:rgba(0,0,0,.4);z-index:600;align-items:center;justify-content:center" onclick="if(event.target===this)fermerConfirmPO()">
-  <div style="background:var(--w);border-radius:12px;width:600px;max-width:92vw;max-height:85vh;overflow-y:auto;padding:22px">
+  <!-- 🚀 FIXED: Widened the modal to 700px and increased padding for a cleaner look -->
+  <div style="background:var(--w);border-radius:12px;width:700px;max-width:92vw;max-height:85vh;overflow-y:auto;padding:26px">
     <div style="display:flex;align-items:center;margin-bottom:16px">
-      <span style="font-size:14px;font-weight:600" id="cpo-title">Confirmer la commande</span>
+      <span style="font-size:16px;font-weight:600" id="cpo-title">Confirmer la commande</span>
       <button class="rbtn" onclick="fermerConfirmPO()" style="margin-left:auto">✕</button>
     </div>
     
     <div id="cpo-lignes" style="margin-bottom:14px; max-height: 400px; overflow-y: auto; padding-right: 8px;"></div>
     
-    <div id="cpo-total" style="text-align:right;font-size:14px;font-weight:700;color:var(--br);margin-bottom:16px; padding-top: 10px; border-top: 1px solid var(--b2);"></div>
+    <div id="cpo-total" style="text-align:right;font-size:15px;font-weight:700;color:var(--br);margin-bottom:20px; padding-top: 14px; border-top: 1px solid var(--b2);"></div>
     
-    <div style="display:flex;gap:8px;justify-content:flex-end">
+    <!-- 🚀 FIXED: Neatly structured side-by-side layout in a soft gray box -->
+    <div style="display:flex; gap:20px; margin-bottom:24px; background:var(--bg); padding:16px; border-radius:8px; border:1px solid var(--b1);">
+        <div style="flex:1;">
+            <label style="font-size:12px;color:var(--t1);font-weight:600;display:block;margin-bottom:8px;">📅 Date de livraison (optionnel)</label>
+            <input type="date" id="cpo-date" class="fin" style="width:100%; padding:8px;">
+        </div>
+        <div style="flex:1.5;">
+            <label style="font-size:12px;color:var(--t1);font-weight:600;display:block;margin-bottom:8px;">📝 Note au fournisseur (optionnel)</label>
+            <textarea id="cpo-note" class="fin" style="width:100%;height:60px;resize:vertical;padding:8px;" placeholder="Ex: Livraison porte arrière..."></textarea>
+        </div>
+    </div>
+    
+    <div style="display:flex;gap:10px;justify-content:flex-end">
       <button class="rbtn" onclick="fermerConfirmPO()">Annuler</button>
-      <button class="fb on" id="cpo-submit" onclick="validerConfirmPO()">Envoyer à Shopify</button>
+      <!-- 🚀 FIXED: The missing PDF button is officially restored -->
+      <button class="rbtn" onclick="telechargerPDFConfirmPO()">📄 Télécharger le PDF</button>
+      <button class="fb on" id="cpo-submit" onclick="validerConfirmPO()" style="padding:8px 16px; font-weight:600;">Envoyer à Shopify</button>
     </div>
   </div>
 </div>
 <!-- FIN NOUVEAU MODAL -->
 
 <div id="modal-cmd-overlay" style="display:none;position:fixed;inset:0;background:rgba(0,0,0,.4);z-index:500;align-items:center;justify-content:center" onclick="if(event.target===this)fermerCommandeManuelle()">
-  <div style="background:var(--w);border-radius:12px;width:600px;max-width:92vw;max-height:85vh;overflow-y:auto;padding:22px">
+  <!-- 🚀 FIXED: Widened the modal to 700px and increased padding -->
+  <div style="background:var(--w);border-radius:12px;width:700px;max-width:92vw;max-height:85vh;overflow-y:auto;padding:26px">
     <div style="display:flex;align-items:center;margin-bottom:16px">
-      <span style="font-size:14px;font-weight:600">Nouvelle commande manuelle</span>
+      <span style="font-size:16px;font-weight:600">Nouvelle commande manuelle</span>
       <button class="rbtn" onclick="fermerCommandeManuelle()" style="margin-left:auto">✕</button>
     </div>
 
@@ -455,22 +473,28 @@
     </div>
     
     <div id="mc-lignes" style="margin-bottom:6px"></div>
-    <div id="mc-total" style="text-align:right;font-size:13px;font-weight:600;color:var(--br);margin-bottom:14px"></div>
+    <div id="mc-total" style="text-align:right;font-size:14px;font-weight:700;color:var(--br);margin-bottom:20px; padding-top: 14px; border-top: 1px solid var(--b2);"></div>
 
-    <label style="font-size:11px;color:var(--t2);font-weight:600">Date de livraison (optionnel)</label>
-    <input type="date" id="mc-date" class="fin" style="width:100%;margin:6px 0 14px">
-
-    <label style="font-size:11px;color:var(--t2);font-weight:600">Note (optionnel)</label>
-    <textarea id="mc-note" class="fin" style="width:100%;height:50px;margin:6px 0 16px;resize:vertical"></textarea>
+    <!-- 🚀 FIXED: Neatly structured side-by-side layout in a soft gray box -->
+    <div style="display:flex; gap:20px; margin-bottom:24px; background:var(--bg); padding:16px; border-radius:8px; border:1px solid var(--b1);">
+        <div style="flex:1;">
+            <label style="font-size:12px;color:var(--t1);font-weight:600;display:block;margin-bottom:8px;">📅 Date de livraison (optionnel)</label>
+            <input type="date" id="mc-date" class="fin" style="width:100%; padding:8px;">
+        </div>
+        <div style="flex:1.5;">
+            <label style="font-size:12px;color:var(--t1);font-weight:600;display:block;margin-bottom:8px;">📝 Note (optionnel)</label>
+            <textarea id="mc-note" class="fin" style="width:100%;height:60px;resize:vertical;padding:8px;" placeholder="Ex: Commande d'urgence..."></textarea>
+        </div>
+    </div>
 
     <div id="mc-success" style="display:none;align-items:center;gap:10px;margin-bottom:14px;padding:10px 14px;background:var(--grb);border:1px solid var(--gr);border-radius:8px">
       <span style="font-size:12px;font-weight:600;color:var(--gr)" id="mc-success-text"></span>
       <button class="fb" style="margin-left:auto" onclick="genererPDFCommandeManuelle()">📄 PDF fournisseur</button>
     </div>
 
-    <div style="display:flex;gap:8px;justify-content:flex-end">
+    <div style="display:flex;gap:10px;justify-content:flex-end">
       <button class="rbtn" onclick="fermerCommandeManuelle()">Annuler</button>
-      <button class="fb on" id="mc-submit" onclick="envoyerCommandeManuelle()">Créer la commande</button>
+      <button class="fb on" id="mc-submit" onclick="envoyerCommandeManuelle()" style="padding:8px 16px; font-weight:600;">Créer la commande</button>
     </div>
   </div>
 </div>
