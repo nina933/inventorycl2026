@@ -3406,77 +3406,70 @@ async function enregistrerModifPO(){
   if(!MODIF_PO_CTX) return;
   const {fourn, poNumber} = MODIF_PO_CTX;
 
-  // 🚀 FIXED: Instantly save Prices, SKUs, and Quantities to local memory for the PDF!
+  // 1. Instantly save everything to local memory for the PDF!
   const oldEntryIndex = PO_ENVOYES[fourn].findIndex(e => e.poNumber === poNumber);
   if (oldEntryIndex > -1) {
      PO_ENVOYES[fourn][oldEntryIndex].lignes = MODIF_PO_LINES;
   }
 
-  // 🚀 THE DATE FIX: Grab the new date and force it into the Dashboard's master memory
+  // 2. Lock the new Date into memory
   const newDateVal = document.getElementById('mp-date').value;
   if (newDateVal) {
       const newDateFmt = new Date(newDateVal + 'T00:00:00').toLocaleDateString('fr-CA', {day:'numeric', month:'long', year:'numeric'});
-      // Find the original order card in the background and overwrite its date
       const existingOrder = STOCKY.find(c => c.cmd === poNumber) || TRANSFERTS.find(c => c.cmd === poNumber);
       if (existingOrder) {
           existingOrder.livraison = newDateFmt;
-          existingOrder.livraison_originale = ''; // Erases the old fuzzy text so it doesn't overlap
+          existingOrder.livraison_originale = ''; 
       }
   }
 
-  const augmentations = MODIF_PO_LINES.filter(l=>l.quantite>l.quantiteOriginale);
-  const diminutions = MODIF_PO_LINES.filter(l=>l.quantite<l.quantiteOriginale);
-  
-  const envoyables = augmentations.filter(l => l.idVariante && !String(l.idVariante).startsWith('custom-')).map(l=>({idVariante:l.idVariante, quantite:l.quantite-l.quantiteOriginale, nom:l.nom, variante:l.variante, sku:l.sku}));
-  const sansIdVariante = augmentations.filter(l => !l.idVariante || String(l.idVariante).startsWith('custom-'));
+  // 🚀 FIXED: Grab ALL valid Shopify items with their NEW absolute quantities
+  const envoyablesShopify = MODIF_PO_LINES
+      .filter(l => l.idVariante && !String(l.idVariante).startsWith('custom-') && l.quantite > 0)
+      .map(l => ({idVariante: l.idVariante, quantite: l.quantite, nom: l.nom, variante: l.variante, sku: l.sku}));
 
-  if(diminutions.length){
-    alert('Les réductions de quantité ne sont pas automatisées vers Shopify. Ajustez le transfert ' + poNumber + ' dans l\'admin Shopify si besoin.');
-  }
-  
-  if(sansIdVariante.length && !envoyables.length){
-     fermerModifPO();
-     rPO();
-     alert("Produits personnalisés ajoutés avec succès au PO (pour le PDF).");
-     return;
-  }
-
-  // 🚀 FIXED: If only prices were changed, confirm the local save and stop.
-  if(!envoyables.length){ 
+  if(!envoyablesShopify.length){ 
      fermerModifPO(); 
      rPO(); 
-     alert("Modifications enregistrées localement pour le PDF !"); 
+     alert("Modifications enregistrées localement pour le PDF ! (Aucun produit Shopify à synchroniser)"); 
      return; 
   }
 
-  if(!confirm('Envoyer un complément pour ' + envoyables.length + ' produit(s) Shopify (suite au PO ' + poNumber + ') ?'))return;
+  if(!confirm(`Mettre à jour le transfert Shopify ${poNumber} avec les nouvelles quantités ?`)) return;
 
   const btn = document.getElementById('mp-submit');
-  if(btn){ btn.disabled = true; btn.textContent = 'Envoi…'; }
+  if(btn){ btn.disabled = true; btn.textContent = 'Mise à jour Shopify...'; }
 
   try{
-    const note = 'Modification du PO ' + poNumber + ' — complément suite ajustement de quantités';
-    
-    // 🚀 NEW: Capture the date and send it to Shopify
-    const dateInput = document.getElementById('mp-date').value;
-    const data = await envoyerLignesAuBackend(fourn, note, envoyables.map(l=>({idVariante:l.idVariante, quantite:l.quantite})), dateInput);
+    // 🚀 NEW: Call the new backend update engine
+    const data = await fetch(URL_AS, {
+      method: 'POST',
+      headers: { 'Content-Type': 'text/plain;charset=utf-8' },
+      body: JSON.stringify({ 
+          action: 'update_po', 
+          poNumber: poNumber, 
+          fournisseur: fourn, 
+          dateLivraison: newDateVal, 
+          lignes: envoyablesShopify 
+      })
+    }).then(r => r.json());
 
     if(data.success){
-      // Save EVERYTHING back to local state so the PDF includes the original + new custom + new envoyables
+      if (!PO_ENVOYES[fourn]) PO_ENVOYES[fourn] = [];
       const updatedIndex = PO_ENVOYES[fourn].findIndex(e => e.poNumber === poNumber);
       if (updatedIndex > -1) {
          PO_ENVOYES[fourn][updatedIndex].lignes = MODIF_PO_LINES;
+      } else {
+         PO_ENVOYES[fourn].push({poNumber: poNumber, lignes: MODIF_PO_LINES, date:new Date().toISOString()});
       }
-      
-      PO_ENVOYES[fourn].push({poNumber: data.poNumber, lignes: envoyables.map(l=>({idVariante:l.idVariante,quantite:l.quantite,nom:l.nom,variante:l.variante,sku:l.sku})), date:new Date().toISOString()});
       
       fermerModifPO();
       rPO();
-      if(confirm('Complément Shopify créé (' + data.poNumber + '). Télécharger le PDF mis à jour maintenant ?')){
+      if(confirm(`Le transfert ${poNumber} a été mis à jour dans Shopify ! Télécharger le nouveau PDF ?`)){
         telechargerPDFUnPO(fourn, poNumber); 
       }
     } else {
-      alert('Erreur : ' + (data.error || 'inconnue'));
+      alert('Erreur Shopify : ' + (data.error || 'inconnue'));
       if(btn){ btn.disabled = false; btn.textContent = 'Enregistrer les modifications'; }
     }
   } catch(err){
