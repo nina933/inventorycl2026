@@ -3441,7 +3441,7 @@ async function enregistrerModifPO(){
   if(btn){ btn.disabled = true; btn.textContent = 'Mise à jour Shopify...'; }
 
   try{
-    // 🚀 NEW: Call the new backend update engine
+    // 🚀 NEW: Call the new backend update engine directly!
     const data = await fetch(URL_AS, {
       method: 'POST',
       headers: { 'Content-Type': 'text/plain;charset=utf-8' },
