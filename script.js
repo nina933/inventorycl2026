@@ -769,14 +769,17 @@ async function loadData(){
 
     // Now calculate the true Status and Solde using the accurate en_cmd
     PRODS.forEach(p => {
-        if (p.stock < 0) {
-            p.statut = 'rupture';
-        } else if ((p.stock + p.en_cmd) < p.demande_cumulee && p.demande_cumulee > 0) {
-            p.statut = 'critique';
+        p.solde = p.stock + p.en_cmd; // 🚀 Calculate Solde FIRST so we can use it!
+
+        if (p.stock <= 0 && p.solde <= 0) { 
+            p.statut = 'rupture'; // True Rupture: 0 physical stock AND 0 incoming
+        } else if (p.stock <= 0 && p.solde > 0) {
+            p.statut = 'critique'; // 🚀 Downgrades to Critique because help is on the way
+        } else if (p.solde < p.demande_cumulee && p.demande_cumulee > 0) {
+            p.statut = 'critique'; // Low stock, not enough incoming to cover demand
         } else {
-            p.statut = 'active';
+            p.statut = 'active'; // Healthy
         }
-        p.solde = p.stock + p.en_cmd;
     });
 
 
@@ -1539,7 +1542,12 @@ function rReceptions(){
           <span class="rh-cmd">${typeLabel} #${cleanCmd}</span>
           <span class="rh-f">${c.fourn}</span>
           <span class="rh-d">📅 ${c.livraison}${oldDateHtml}</span>
-          <span class="rh-cnt">${c.lignes.length} produit(s) · ${fmt(c.total)} unités <span id="arr${prefix}${i}">${arrow}</span></span>
+          <span class="rh-cnt" style="display:flex; align-items:center; gap:10px;">
+              ${c.lignes.length} produit(s) · ${fmt(c.total)} unités 
+              <!-- 🚀 NEW: The Duplication Button -->
+              <button class="fb" style="padding:2px 8px; font-size:10px;" onclick="event.stopPropagation(); dupliquerCommande('${c.cmd}', '${c.fourn.replace(/'/g,"\\\\'")}', '${prefix}')">📄 Dupliquer</button>
+              <span id="arr${prefix}${i}">${arrow}</span>
+          </span>
         </div>
         <div class="rb ${openCls}" id="rb${prefix}${i}">
           <table style="width:100%">
@@ -1579,6 +1587,50 @@ function toggleRec(id,aid){
   const a=document.getElementById(aid);
   const open=b.classList.toggle('open');
   if(a)a.textContent=open?'▲':'▼';
+}
+
+// ==========================================================
+// 🚀 DUPLIQUER UN TRANSFERT / PO EXISTANT
+// ==========================================================
+function dupliquerCommande(cmdId, fourn, prefix) {
+    // 1. Find the original order in the memory buckets
+    const sourceArray = prefix === 'S' ? STOCKY : TRANSFERTS;
+    const originalOrder = sourceArray.find(c => String(c.cmd) === String(cmdId) && c.fourn === fourn);
+    
+    if (!originalOrder) {
+        alert("Erreur : Commande originale introuvable.");
+        return;
+    }
+    
+    // 2. Open the Manual Order Modal
+    ouvrirCommandeManuelle();
+    
+    // 3. Auto-fill the supplier
+    document.getElementById('mc-fourn').value = fourn;
+    
+    // 4. Auto-add all the original lines
+    originalOrder.lignes.forEach(l => {
+        const pMatch = PRODS.find(p => p.idVariante === l.idVariante || (p.nom === l.nom && p.variante === l.variante));
+        
+        if (pMatch) {
+            MANUAL_LINES.push({ 
+                idVariante: pMatch.idVariante, 
+                nom: pMatch.nom, 
+                variante: pMatch.variante || '', 
+                quantite: l.qty 
+            });
+        } else if (l.idVariante) {
+            MANUAL_LINES.push({ 
+                idVariante: l.idVariante, 
+                nom: l.nom, 
+                variante: l.variante || '', 
+                quantite: l.qty 
+            });
+        }
+    });
+    
+    // 5. Instantly draw the copied lines into the UI!
+    renderLignesManuelles();
 }
 
 // ==========================================================
@@ -2568,13 +2620,7 @@ function rDormant() {
     document.getElementById('rc-dormant').textContent = tableRows.length + ' produit(s)';
 
 
-    // Compile the Tier A Top Performers list for the simulation dropdowns
-    const tierAProds = PRODS.filter(p => p.pareto === 'A');
-    let optionsA = '<option value="">Sélectionner cible A...</option>';
-    tierAProds.forEach(p => {
-        if (!p.id) return; // Only use products with a valid Variant ID
-        optionsA += `<option value="${p.id}">${p.nom}${p.variante ? ' - ' + p.variante : ''}</option>`;
-    });
+    
 
 
     // Render Table
@@ -2603,12 +2649,51 @@ function rDormant() {
             </td>
             <td style="text-align:right; font-weight:500;">${fmt(row.velocity)}</td>
             <td style="text-align:center;">
-                <select class="fsel" style="max-width: 140px; font-size: 11px;" onchange="simulerLigne(this.value, ${row.capital})">
-                    ${optionsA}
-                </select>
+                <div style="position:relative; display:inline-block; text-align:left;">
+                    <input type="text" class="fin" placeholder="🔍 Rechercher..." 
+                           style="width: 160px; font-size: 11px; padding: 4px; text-align:center;" 
+                           oninput="chercherSim(this, ${row.capital})" onfocus="chercherSim(this, ${row.capital})" onblur="setTimeout(()=>fermerSim(this), 200)">
+                    <div class="sim-res" style="display:none;position:absolute;z-index:99;background:var(--w);border:1px solid var(--b2);border-radius:6px;width:240px;max-height:200px;overflow-y:auto;box-shadow:0 4px 12px rgba(0,0,0,.15);right:0;top:100%;margin-top:4px;"></div>
+                </div>
             </td>
         </tr>`;
     }).join('') || `<tr><td colspan="8" style="text-align:center;padding:40px;color:var(--t3)">Aucun stock dormant détecté 🎉</td></tr>`;
+}
+
+// ==========================================================
+// AUTOCOMPLETE ENGINE FOR SIMULATION
+// ==========================================================
+function chercherSim(el, cap) {
+    const q = el.value.toLowerCase().trim();
+    const resDiv = el.nextElementSibling;
+    if (!q) { resDiv.style.display = 'none'; return; }
+    
+    // Search the ENTIRE catalog by Name, Variant, or SKU
+    const matches = PRODS.filter(p => 
+        p.nom.toLowerCase().includes(q) || 
+        (p.variante && p.variante.toLowerCase().includes(q)) || 
+        (p.skuFourn && p.skuFourn.toLowerCase().includes(q))
+    ).slice(0, 15);
+
+    if (!matches.length) {
+        resDiv.innerHTML = '<div style="padding:8px;font-size:11px;color:var(--t3);text-align:center;">Aucun résultat</div>';
+    } else {
+        resDiv.innerHTML = matches.map(p => {
+            const idSafe = (p.idVariante || p.nom).replace(/'/g, "\\'");
+            const nomTxt = p.nom.replace(/'/g, "&#39;");
+            const varTxt = (p.variante||'').replace(/'/g, "&#39;");
+            return `<div style="padding:6px 10px;font-size:11px;border-bottom:1px solid var(--b1);cursor:pointer;line-height:1.3;" 
+                         onclick="document.getElementById('kpi-receipt-card').scrollIntoView({behavior:'smooth'}); simulerLigne('${idSafe}', ${cap})">
+                      <div style="font-weight:600;color:var(--t1)">${nomTxt}</div>
+                      ${varTxt ? `<div style="color:var(--t3);font-size:10px">${varTxt}</div>` : ''}
+                    </div>`;
+        }).join('');
+    }
+    resDiv.style.display = 'block';
+}
+
+function fermerSim(el) {
+    if(el && el.nextElementSibling) el.nextElementSibling.style.display = 'none';
 }
 
 // ==========================================================
@@ -2684,14 +2769,18 @@ function simulerLigne(targetId, capitalDisponible) {
         return;
     }
 
-    // 1. Find the target Tier A product using the precise Variant ID
-    const targetProd = PRODS.find(x => x.id === targetId);
-    if (!targetProd) return;
+    // 🚀 FIXED: Find the target product using the typed text from the datalist
+    // 🚀 FIXED: Allow the simulation to search the exact catalog ID or full Name
+    const targetProd = PRODS.find(x => x.idVariante === targetId || x.nom === targetId);
+    
+    if (!targetProd) {
+        alert("Produit introuvable dans le catalogue.");
+        return;
+    }
 
     // 2. Retrieve Costs and Prices directly from the global maps
     const targetCost = targetProd.cout || 0;
-    // Check ID first. If 0, try the Short Name. If 0, try the Full Name.
-    const targetPrice = PRIX_MAP[targetId] || PRIX_MAP[targetProd.nom] || PRIX_MAP[targetProd.nb] || 0;
+    const targetPrice = PRIX_MAP[targetProd.idVariante] || PRIX_MAP[targetProd.nom] || PRIX_MAP[targetProd.nb] || 0;
 
     console.log("Debug - TargetID:", targetId, "Nom:", targetProd.nom, "Prix Trouvé:", targetPrice);
     const profitPerUnit = targetPrice - targetCost;
@@ -3179,6 +3268,13 @@ function fermerModifPO(){
   document.getElementById('modal-modifpo-overlay').style.display = 'none';
   MODIF_PO_CTX = null;
   MODIF_PO_LINES = [];
+
+  // 🚀 FIXED: Unfreeze and reset the submit button so it works the next time you open the modal!
+  const btn = document.getElementById('mp-submit');
+  if(btn){ 
+      btn.disabled = false; 
+      btn.textContent = 'Enregistrer les modifications'; 
+  }
 }
 
 function majQuantiteModifPOLigne(idx, val){
@@ -3501,6 +3597,22 @@ function renderLignesManuelles(){
     const prixU = prixLigneManuelle(l);
     const totalLigne = prixU * l.quantite;
     
+    // 🚀 NEW: Retrieve MOQ and build validation badges
+    const moq = MOQ_MAP[l.idVariante] || 1;
+    let validationBadge = '';
+    let moqBadge = moq > 1 
+        ? `<div style="background:var(--amb); color:var(--am); padding:2px 4px; border-radius:4px; font-size:9px; font-weight:bold; margin-top:4px; display:inline-block;">📦 Lot de ${moq}</div>` 
+        : `<div style="color:var(--t3); font-size:9px; font-weight:600; margin-top:4px;">Pas de min.</div>`;
+    
+    if (moq > 1 && l.quantite > 0) {
+        if (l.quantite % moq === 0) {
+            validationBadge = `<div style="color:var(--gr); font-size:10px; font-weight:bold; margin-top:4px;">✅ OK</div>`;
+        } else {
+            validationBadge = `<div style="color:var(--re); font-size:10px; font-weight:bold; margin-top:4px;">⚠️ Invalide</div>`;
+        }
+    }
+    const stepVal = moq > 1 ? moq : '1';
+
     return `
     <div style="display:flex;align-items:center;gap:10px;padding:8px 0;border-bottom:1px solid var(--b1)">
       <div style="flex:1">
@@ -3508,19 +3620,21 @@ function renderLignesManuelles(){
         ${l.variante ? `<div style="font-size:11px;color:var(--t3)">${l.variante}</div>` : ''}
       </div>
       
-      <!-- 🚀 NEW: Editable Unit Price Column (Accepts Decimals) -->
       <div style="display:flex;flex-direction:column;gap:2px;align-items:flex-end;">
         <span style="font-size:10px;color:var(--t3)">Prix unit.</span>
         <input type="number" min="0" step="0.01" value="${prixU > 0 ? prixU.toFixed(2) : '0.00'}" onchange="majPrixManuelle(${idx},this.value)" style="width:65px;padding:4px;border:1px solid var(--b2);border-radius:6px;font-size:12px;text-align:right">
       </div>
 
-      <!-- 🚀 NEW: Quantity Column (Strictly Whole Numbers) -->
+      <!-- 🚀 FIXED: Quantity Column with strict MOQ Logic -->
       <div style="display:flex;flex-direction:column;gap:2px;align-items:center;">
         <span style="font-size:10px;color:var(--t3)">Qté</span>
-        <input type="number" min="0" step="1" value="${l.quantite}" onchange="majQuantiteManuelle(${idx},this.value)" style="width:50px;padding:4px;border:1px solid var(--b2);border-radius:6px;font-size:12px;text-align:center">
+        <input type="number" min="0" step="${stepVal}" value="${l.quantite}" onchange="majQuantiteManuelle(${idx},this.value)" style="width:50px;padding:4px;border:1px solid var(--b2);border-radius:6px;font-size:12px;text-align:center">
+        <div style="display:flex; flex-direction:column; align-items:center;">
+            ${moqBadge}
+            ${validationBadge}
+        </div>
       </div>
       
-      <!-- 🚀 NEW: Dynamic Line Total Column -->
       <div style="width:70px;text-align:right;font-size:12px;color:var(--br);font-weight:500;margin-top:14px;">
         ${fmtM(totalLigne)}
       </div>
@@ -3555,8 +3669,22 @@ async function envoyerCommandeManuelle(){
   const lignesCustom = MANUAL_LINES
     .filter(l => l.quantite > 0 && String(l.idVariante).startsWith('custom-'));
 
+
+
+
   const toutesLesLignesValides = MANUAL_LINES.filter(l => l.quantite > 0);
   if(!toutesLesLignesValides.length){ alert('Toutes les quantités sont à 0.'); return; }
+
+  // 🚀 NEW: VERIFICATION DES MULTIPLES (MOQ HARD BLOCK FOR MANUAL ORDERS)
+  for (let l of toutesLesLignesValides) {
+      if (String(l.idVariante).startsWith('custom-')) continue;
+      const moqRequis = MOQ_MAP[l.idVariante] || 1;
+      if (moqRequis > 1 && l.quantite % moqRequis !== 0) {
+          alert(`⚠️ Arrêt : La quantité pour "${l.nom}" (${l.quantite}) n'est pas un multiple de ${moqRequis}. Modifiez la quantité pour correspondre au lot.`);
+          return; 
+      }
+  }
+
 
   const btn = document.getElementById('mc-submit');
   btn.disabled = true;
@@ -3866,17 +3994,14 @@ function rScanback() {
 
     // --- 1. Agréger les réceptions (Stocky & Transferts) ---
     let recuParId = {};
+    let recuAnneeParId = {}; // 🚀 NEW: Tracks the entire year
 
     function aggregerReceptions(listeCommandes) {
         listeCommandes.forEach(c => {
-            // Ignorer si le fournisseur ne correspond pas
             if (!c.fourn || !c.fourn.toLowerCase().includes(targetFourn.toLowerCase().split(' ')[0])) return;
-            
-            // Ignorer si pas de date de livraison
             if (!c.livraison || c.livraison === '—') return;
             
             try {
-                // Parse la date (Format JJ/MM/AA ou YYYY-MM-DD)
                 let d;
                 if (c.livraison.includes('/')) {
                     const parts = c.livraison.split('/');
@@ -3885,12 +4010,17 @@ function rScanback() {
                     d = new Date(c.livraison);
                 }
 
-                // Si la commande tombe dans le mois et l'année sélectionnés
-                if (d.getFullYear() === targetYear && d.getMonth() === targetMonth) {
+                // Si la commande tombe dans l'année sélectionnée
+                if (d.getFullYear() === targetYear) {
                     c.lignes.forEach(l => {
-                        // 🚀 THE FIX: Only count units if they successfully arrived! Ignores Annulé/En transit.
                         if (l.idVariante && l.status === 'Reçu') {
-                            recuParId[l.idVariante] = (recuParId[l.idVariante] || 0) + (l.qty || 0);
+                            // 🚀 Add to Yearly Total
+                            recuAnneeParId[l.idVariante] = (recuAnneeParId[l.idVariante] || 0) + (l.qty || 0);
+                            
+                            // 🚀 Add to Monthly Total
+                            if (d.getMonth() === targetMonth) {
+                                recuParId[l.idVariante] = (recuParId[l.idVariante] || 0) + (l.qty || 0);
+                            }
                         }
                     });
                 }
@@ -3945,6 +4075,7 @@ function rScanback() {
             variante: p.variante || '',
             sku: p.skuFourn || '',
             recu: recuMois,
+            recu_annee: recuAnneeParId[p.idVariante] || 0, // 🚀 NEW
             vendu: venduMois,
             vendu_annee: venduAnnee
         });
@@ -3964,6 +4095,7 @@ function rScanback() {
             </td>
             <td style="font-size:12px;color:var(--t3);">${row.sku || '—'}</td>
             <td style="text-align:right; font-weight:${row.recu > 0 ? '600' : '400'}; color:${row.recu > 0 ? 'var(--br)' : 'var(--t3)'};">${fmt(row.recu)}</td>
+            <td style="text-align:right; color:var(--t2); font-size:12px;">${fmt(row.recu_annee)}</td>
             <td style="text-align:right; font-weight:600;">${fmt(row.vendu)}</td>
             <td style="text-align:right; font-size:12px; color:var(--t2);">${fmt(row.vendu_annee)}</td>
             <td style="text-align:center;">
