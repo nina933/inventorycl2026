@@ -3478,6 +3478,9 @@ async function enregistrerModifPO(){
   }
 }
 
+
+
+
 // ============================================================
 // Commande manuelle — choix libre de fournisseur/produits/quantités
 // ============================================================
