@@ -3412,6 +3412,18 @@ async function enregistrerModifPO(){
      PO_ENVOYES[fourn][oldEntryIndex].lignes = MODIF_PO_LINES;
   }
 
+  // 🚀 THE DATE FIX: Grab the new date and force it into the Dashboard's master memory
+  const newDateVal = document.getElementById('mp-date').value;
+  if (newDateVal) {
+      const newDateFmt = new Date(newDateVal + 'T00:00:00').toLocaleDateString('fr-CA', {day:'numeric', month:'long', year:'numeric'});
+      // Find the original order card in the background and overwrite its date
+      const existingOrder = STOCKY.find(c => c.cmd === poNumber) || TRANSFERTS.find(c => c.cmd === poNumber);
+      if (existingOrder) {
+          existingOrder.livraison = newDateFmt;
+          existingOrder.livraison_originale = ''; // Erases the old fuzzy text so it doesn't overlap
+      }
+  }
+
   const augmentations = MODIF_PO_LINES.filter(l=>l.quantite>l.quantiteOriginale);
   const diminutions = MODIF_PO_LINES.filter(l=>l.quantite<l.quantiteOriginale);
   
