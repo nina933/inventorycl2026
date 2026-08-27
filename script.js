@@ -2030,7 +2030,8 @@ function rPO(){
     const prods = byF[f] || []; 
     const idx = blocIdx; 
     
-    if(prods.length > 0 || (byFournHP[f] && byFournHP[f].length > 0)){
+    const dejaEnvoyesCheck = (PO_ENVOYES[f]||[]).some(e=>e.lignes.some(l=>l.quantite>0));
+if(prods.length > 0 || (byFournHP[f] && byFournHP[f].length > 0) || dejaEnvoyesCheck){
       const dejaEnvoyes=PO_ENVOYES[f]||[];
       const idVEnvoyes=idVEnvoyesFor(f);
       
