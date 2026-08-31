@@ -767,14 +767,14 @@ async function loadData(){
         });
     });
 
-    // Now calculate the true Status and Solde using the accurate en_cmd
+        // Now calculate the true Status and Solde using the accurate en_cmd
     PRODS.forEach(p => {
         p.solde = p.stock + p.en_cmd; // 🚀 Calculate Solde FIRST so we can use it!
 
-        if (p.stock <= 0 && p.solde <= 0) { 
-            p.statut = 'rupture'; // True Rupture: 0 physical stock AND 0 incoming
-        } else if (p.stock <= 0 && p.solde > 0) {
-            p.statut = 'critique'; // 🚀 Downgrades to Critique because help is on the way
+        if (p.stock <= 0 && p.solde < 0) { 
+            p.statut = (p.demande_cumulee > 0) ? 'rupture' : 'active'; // Vraie rupture: encore négatif même avec les commandes en cours, ET il y a de la demande
+        } else if (p.stock <= 0 && p.solde >= 0) {
+            p.statut = 'critique'; // 🚀 Downgrades to Critique because incoming stock covers the gap
         } else if (p.solde < p.demande_cumulee && p.demande_cumulee > 0) {
             p.statut = 'critique'; // Low stock, not enough incoming to cover demand
         } else {
