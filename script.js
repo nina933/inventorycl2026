@@ -1,4 +1,3 @@
-
 // Deployment URL (NOT THE ACTUAL Google App Script)
 // No API keys in danger, only our catalog and inventory. 
 const URL_AS='https://script.google.com/macros/s/AKfycbz1VxL0PwyXBgxEiP6FuiGiuTN9abahOfc0D6ZiRoPnkaGUmSvUDz7PzDAmsSIgxDapJA/exec';
@@ -58,6 +57,7 @@ window.addEventListener('unhandledrejection', function(event) {
 // e.g., PRIX_MAP looks up a product's name and instantly gives you its unit cost.
 // Removed ETAT, added TRANSFERTS, COUT_MAP, PRIX_ID_MAP, and ABC_ID_MAP (July 16th)
 let PRODS=[],STOCKY=[],TRANSFERTS=[],RECEPTIONS=[],PREVISION=[],PROMOS=[],BUDGET=[],PRIX_MAP={},PRIX_ID_MAP={},COUT_MAP={},DELAIS_MAP={},FORECAST=[],MAPPING_IDS=[];
+let KIT_IDS=new Set(); // 🚀 IDs des variantes "kit/bundle" gérées par l'app Bundle — à cacher partout
 // Phonebook specifically to store custom notes/comments about specific products.
 let COMMENTS_MAP={};
 let MOQ_MAP={};
@@ -589,6 +589,7 @@ async function loadData(){
     const sRows=raw['Stock produits']||[];
     const seen=new Set();
     PRODS=[];
+    KIT_IDS=new Set(); // 🚀 Réinitialisé à chaque chargement
     sRows.slice(1).forEach(r=>{
       const nom=String(r[1]||r[2]||'').trim().replace(/\s*\|\s*$/,'');
       if(!nom||nom==='Clé produit'||nom.startsWith('Dernière')||nom.startsWith('Actualisation'))return;
@@ -610,6 +611,10 @@ async function loadData(){
       }
       
       const variante=String(r[3]||'').trim();
+
+      // 🚀 NOUVEAU: Exclure les variantes "kit" gérées par l'app Bundle (stock déjà lié au produit parent)
+      if (/bags?\s+of|packs?\s+of|year\s+of/i.test(variante)) { KIT_IDS.add(idVariante); return; }
+
       const en_cmd=n(r[13]||0);
       const pc=String(r[15]||'').trim();
       const pareto=(['A','B','C'].includes(pc)?pc:(ABC_ID_MAP[idVariante]||ABC_MAP[nb]||ABC_MAP[nom]||'C'));
@@ -1123,7 +1128,7 @@ function rAlertes(){
         lowerName.includes("open box") ||
         lowerName.includes("return") ||
         lowerName.includes("refurbished") ||
-        lowerName.includes("à vendre en boutique")
+        lowerName.includes("à vendre en boutique") ||
         lowerName.includes("tasting pack") ||       // NOUVEAU : Exclut les packs dégustation
         lowerName.includes("3 x 1kg");
 
@@ -1793,6 +1798,9 @@ function rPO(){
     // Ignore "ghost" spreadsheet rows
     if(!r.idVariante) return false;
 
+    // 🚀 NOUVEAU: Exclure les produits kit (gérés par l'app Bundle)
+    if (KIT_IDS.has(r.idVariante)) return false;
+
     // 🚀 NEW FIX: Exclusion List for non-physical/bundled items
     const lowerName = r.nom.toLowerCase();
     const isExcluded = 
@@ -1806,7 +1814,7 @@ function rPO(){
         lowerName.includes("open box") ||
         lowerName.includes("return") ||
         lowerName.includes("refurbished") ||
-        lowerName.includes("à vendre en boutique")
+        lowerName.includes("à vendre en boutique") ||
         lowerName.includes("tasting pack") ||       // NOUVEAU : Exclut les packs dégustation
         lowerName.includes("3 x 1kg");
 
@@ -1941,7 +1949,7 @@ function rPO(){
         lowerName.includes("open box") ||
         lowerName.includes("return") ||
         lowerName.includes("refurbished") ||
-        lowerName.includes("à vendre en boutique")
+        lowerName.includes("à vendre en boutique") ||
         lowerName.includes("tasting pack") ||       // NOUVEAU : Exclut les packs dégustation
         lowerName.includes("3 x 1kg");
 
@@ -2525,7 +2533,7 @@ function rDormant() {
             lowerName.includes("open box") ||
             lowerName.includes("return") ||
             lowerName.includes("refurbished") ||
-            lowerName.includes("à vendre en boutique")
+            lowerName.includes("à vendre en boutique") ||
             lowerName.includes("tasting pack") ||       // NOUVEAU : Exclut les packs dégustation
             lowerName.includes("3 x 1kg");
 
@@ -4315,4 +4323,3 @@ function allerAuxPromos(searchKey) {
 
 // IGNITION: Starts the entire process when the file is loaded
 loadData();
-
