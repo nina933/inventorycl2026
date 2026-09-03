@@ -613,7 +613,7 @@ async function loadData(){
       const variante=String(r[3]||'').trim();
 
       // 🚀 NOUVEAU: Exclure les variantes "kit" gérées par l'app Bundle (stock déjà lié au produit parent)
-      if (/bags?\s+of|packs?\s+of|year\s+of/i.test(variante)) { KIT_IDS.add(idVariante); return; }
+      if (/bags?\s+of|packs?\s+of|years?\s+of/i.test(variante)) { KIT_IDS.add(idVariante); return; }
 
       const en_cmd=n(r[13]||0);
       const pc=String(r[15]||'').trim();
