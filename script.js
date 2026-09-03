@@ -272,6 +272,20 @@ function sc(v){
   return v<0?'sn':v<=5?'sl':'';
 }
 
+// 🚀 NOUVEAU: Détecte si un produit se vend moins d'une fois par mois (faible rotation).
+// Un produit est exclu si son forecast annuel total est < 12 unités,
+// SAUF s'il est en rupture stricte (stock physique négatif) — dans ce cas il reste visible.
+function estFaibleRotation(nomProduit, stockActuel) {
+  const fMatch = FORECAST.find(x => x.nom === nomProduit);
+  let forecastAnnuel = 0;
+  if (fMatch) {
+    forecastAnnuel = (fMatch.M01||0) + (fMatch.M02||0) + (fMatch.M03||0) + (fMatch.M04||0) +
+                     (fMatch.M05||0) + (fMatch.M06||0) + (fMatch.M07||0) + (fMatch.M08||0) +
+                     (fMatch.M09||0) + (fMatch.M10||0) + (fMatch.M11||0) + (fMatch.M12||0);
+  }
+  return (forecastAnnuel < 12 && stockActuel >= 0);
+}
+
 
 function rForecast(){
   const srch=(document.getElementById('s-fc')?.value||'').toLowerCase();
@@ -281,6 +295,12 @@ function rForecast(){
     if(fourns.length&&!fourns.includes(r.fourn))return false;
     if(pars.length&&!pars.includes(r.cat))return false;
     if(srch&&!r.nom.toLowerCase().includes(srch))return false;
+
+    // 🚀 NOUVEAU: Exclure les produits à faible rotation (< 1 vente/mois), sauf rupture stricte
+    const pMatch=PRODS.find(x=>x.nom===r.nom);
+    const stockActuel=pMatch?pMatch.stock:0;
+    if(estFaibleRotation(r.nom,stockActuel))return false;
+
     return true;
   });
   const months=['M01','M02','M03','M04','M05','M06','M07','M08','M09','M10','M11','M12'];
@@ -1134,6 +1154,9 @@ function rAlertes(){
 
     if (isExcluded) return false;
 
+    // 🚀 NOUVEAU: Exclure les produits à faible rotation (< 1 vente/mois), sauf rupture stricte
+    if (estFaibleRotation(p.nom, p.stock)) return false;
+
     const isR=p.statut==='rupture',isC=p.statut==='critique';
 
     if(!isR&&!isC)
@@ -1227,6 +1250,10 @@ function rStocks(){
     
     // 🚀 UPGRADE: Search now looks at both Name and SKU!
     if (srch && !p.nom.toLowerCase().includes(srch) && !(p.skuFourn || '').toLowerCase().includes(srch)) return false;
+
+    // 🚀 NOUVEAU: Exclure les produits à faible rotation (< 1 vente/mois), sauf rupture stricte
+    if (estFaibleRotation(p.nom, p.stock)) return false;
+
     return true;
   });
 
