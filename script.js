@@ -796,10 +796,10 @@ async function loadData(){
     PRODS.forEach(p => {
         p.solde = p.stock + p.en_cmd; // 🚀 Calculate Solde FIRST so we can use it!
 
-        if (p.stock <= 0 && p.solde < 0) { 
-            p.statut = (p.demande_cumulee > 0) ? 'rupture' : 'active'; // Vraie rupture: encore négatif même avec les commandes en cours, ET il y a de la demande
-        } else if (p.stock <= 0 && p.solde >= 0) {
-            p.statut = 'critique'; // 🚀 Downgrades to Critique because incoming stock covers the gap
+        if (p.stock <= 0 && p.en_cmd <= 0) { 
+            p.statut = (p.demande_cumulee > 0) ? 'rupture' : 'active'; // Vraie rupture: rien du tout en commande, ET il y a de la demande
+        } else if (p.stock <= 0 && p.en_cmd > 0) {
+            p.statut = 'critique'; // 🚀 Downgrades to Critique because something real is actually incoming
         } else if (p.solde < p.demande_cumulee && p.demande_cumulee > 0) {
             p.statut = 'critique'; // Low stock, not enough incoming to cover demand
         } else {
