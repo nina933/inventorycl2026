@@ -1195,8 +1195,8 @@ function rAlertes(){
 
 
   // CALCULATE KPIs: Generate the numbers for the colorful summary boxes at the top
-  const ruptures = PRODS.filter(p => p.statut === 'rupture' && p.demande_cumulee > 0 && equipeMatch(p.fourn) && (p.stock + p.en_cmd) < Math.max(0, p.demande_cumulee)).length;
-  const crit = PRODS.filter(p => p.statut === 'critique' && p.demande_cumulee > 0 && equipeMatch(p.fourn) && (p.stock + p.en_cmd) < p.demande_cumulee).length;
+  const ruptures = PRODS.filter(p => p.statut === 'rupture' && equipeMatch(p.fourn) && (p.stock + p.en_cmd) < Math.max(0, p.demande_cumulee)).length;
+  const crit = PRODS.filter(p => p.statut === 'critique' && equipeMatch(p.fourn) && (p.stock + p.en_cmd) < p.demande_cumulee).length;
   const actifs = PRODS.filter(p => p.statut_produit === 'active' && equipeMatch(p.fourn)).length;
   const pa = PRODS.filter(p => (p.statut === 'rupture' || p.statut === 'critique') && p.pareto === 'A' && p.demande_cumulee > 0 && equipeMatch(p.fourn) && (p.stock + p.en_cmd) < Math.max(0, p.demande_cumulee)).length;
 
@@ -1206,7 +1206,7 @@ function rAlertes(){
     <div class="mc" onclick="clearDD('dd-pa','pa',null);clearDD('dd-fa','fa',null);sC('sta',['rupture']);updDD('dd-sta','sta');rAlertes()"><div class="mcl">Ruptures (stock=0)</div><div class="mcv r">${fmt(ruptures)}</div><div class="mcs">↗ Cliquer pour voir</div></div>
     <div class="mc" onclick="clearDD('dd-pa','pa',null);clearDD('dd-fa','fa',null);sC('sta',['critique']);updDD('dd-sta','sta');rAlertes()"><div class="mcl">Critique</div><div class="mcv a">${fmt(crit)}</div><div class="mcs">↗ Cliquer pour voir</div></div>
     <div class="mc" onclick="clearDD('dd-sta','sta',null);clearDD('dd-fa','fa',null);sC('pa',['A']);updDD('dd-pa','pa');rAlertes()"><div class="mcl">Alertes Pareto A</div><div class="mcv b">${fmt(pa)}</div><div class="mcs">↗ Cliquer pour voir</div></div>
-    <div class="mc" onclick="nav('receptions',document.querySelectorAll('.ni')[4])"><div class="mcl">Réceptions en cours</div><div class="mcv g">${fmt(STOCKY.length)}</div><div class="mcs">↗ Voir les commandes</div></div>`;
+    <div class="mc" onclick="nav('receptions',document.querySelectorAll('.ni')[4])"><div class="mcl">Réceptions en cours</div><div class="mcv g">${fmt(STOCKY.length + TRANSFERTS.length)}</div><div class="mcs">↗ Voir les commandes</div></div>`;
   
   document.getElementById('nb-a').textContent=rows.length||'';
   document.getElementById('rc-a').textContent=rows.length+' produit(s)';
