@@ -286,6 +286,24 @@ function estFaibleRotation(nomProduit, soldeActuel) {
   return (forecastAnnuel < 12 && soldeActuel >= 0);
 }
 
+// 🚀 NOUVEAU: Centralise la liste d'exclusion (bundles, gift cards, etc.) pour éviter la duplication
+function estProduitExclu(nom) {
+  const lowerName = String(nom||'').toLowerCase();
+  return lowerName.includes("3 months of free coffee") ||
+      lowerName.includes("decaf -swiss process") ||
+      lowerName.includes("new wave") ||
+      lowerName.includes("hoodies") ||
+      lowerName.includes("gift card") ||
+      lowerName.includes("bundle") ||
+      lowerName.includes("demo") ||
+      lowerName.includes("open box") ||
+      lowerName.includes("return") ||
+      lowerName.includes("refurbished") ||
+      lowerName.includes("à vendre en boutique") ||
+      lowerName.includes("tasting pack") ||
+      lowerName.includes("3 x 1kg");
+}
+
 
 function rForecast(){
   const srch=(document.getElementById('s-fc')?.value||'').toLowerCase();
@@ -1195,10 +1213,10 @@ function rAlertes(){
 
 
   // CALCULATE KPIs: Generate the numbers for the colorful summary boxes at the top
-  const ruptures = PRODS.filter(p => p.statut === 'rupture' && equipeMatch(p.fourn) && (p.stock + p.en_cmd) < Math.max(0, p.demande_cumulee)).length;
-  const crit = PRODS.filter(p => p.statut === 'critique' && equipeMatch(p.fourn) && (p.stock + p.en_cmd) < p.demande_cumulee).length;
+  const ruptures = PRODS.filter(p => p.statut === 'rupture' && equipeMatch(p.fourn) && (p.stock + p.en_cmd) < Math.max(0, p.demande_cumulee) && !estProduitExclu(p.nom) && !estFaibleRotation(p.nom, p.solde)).length;
+  const crit = PRODS.filter(p => p.statut === 'critique' && equipeMatch(p.fourn) && (p.stock + p.en_cmd) < p.demande_cumulee && !estProduitExclu(p.nom) && !estFaibleRotation(p.nom, p.solde)).length;
   const actifs = PRODS.filter(p => p.statut_produit === 'active' && equipeMatch(p.fourn)).length;
-  const pa = PRODS.filter(p => (p.statut === 'rupture' || p.statut === 'critique') && p.pareto === 'A' && p.demande_cumulee > 0 && equipeMatch(p.fourn) && (p.stock + p.en_cmd) < Math.max(0, p.demande_cumulee)).length;
+  const pa = PRODS.filter(p => (p.statut === 'rupture' || p.statut === 'critique') && p.pareto === 'A' && p.demande_cumulee > 0 && equipeMatch(p.fourn) && (p.stock + p.en_cmd) < Math.max(0, p.demande_cumulee) && !estProduitExclu(p.nom) && !estFaibleRotation(p.nom, p.solde)).length;
 
   // Inject the KPI boxes into the HTML
   document.getElementById('mg-a').innerHTML=`
@@ -1206,7 +1224,7 @@ function rAlertes(){
     <div class="mc" onclick="clearDD('dd-pa','pa',null);clearDD('dd-fa','fa',null);sC('sta',['rupture']);updDD('dd-sta','sta');rAlertes()"><div class="mcl">Ruptures (stock=0)</div><div class="mcv r">${fmt(ruptures)}</div><div class="mcs">↗ Cliquer pour voir</div></div>
     <div class="mc" onclick="clearDD('dd-pa','pa',null);clearDD('dd-fa','fa',null);sC('sta',['critique']);updDD('dd-sta','sta');rAlertes()"><div class="mcl">Critique</div><div class="mcv a">${fmt(crit)}</div><div class="mcs">↗ Cliquer pour voir</div></div>
     <div class="mc" onclick="clearDD('dd-sta','sta',null);clearDD('dd-fa','fa',null);sC('pa',['A']);updDD('dd-pa','pa');rAlertes()"><div class="mcl">Alertes Pareto A</div><div class="mcv b">${fmt(pa)}</div><div class="mcs">↗ Cliquer pour voir</div></div>
-    <div class="mc" onclick="nav('receptions',document.querySelectorAll('.ni')[4])"><div class="mcl">Réceptions en cours</div><div class="mcv g">${fmt(STOCKY.length + TRANSFERTS.length)}</div><div class="mcs">↗ Voir les commandes</div></div>`;
+    <div class="mc" onclick="nav('receptions',document.querySelectorAll('.ni')[4])"><div class="mcl">Réceptions en cours</div><div class="mcv g">${fmt(STOCKY.filter(c => c.lignes.some(l => l.status !== 'Reçu' && l.status !== 'Annulé' && l.qty > 0)).length + TRANSFERTS.filter(c => c.lignes.some(l => l.status !== 'Reçu' && l.status !== 'Annulé' && l.qty > 0)).length)}</div><div class="mcs">↗ Voir les commandes</div></div>`;
   
   document.getElementById('nb-a').textContent=rows.length||'';
   document.getElementById('rc-a').textContent=rows.length+' produit(s)';
