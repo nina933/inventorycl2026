@@ -84,14 +84,36 @@ let FOURNISSEURS=[],ABC_MAP={},VN1_MAP={};
 // SEL_BUDGET = Remembers if the user has clicked on a specific budget row (starts empty/null)
 let PF='all', CV='alertes', SEL_BUDGET=null;
 
-// 🚀 NOUVEAU: Mode de tri pour l'onglet Réceptions ('date' ou 'fourn')
-let SORT_MODE_R = 'date';
+// 🚀 NOUVEAU: Mode de tri pour l'onglet Réceptions — tableau de priorités
+// ['date'] = tri par date seulement. ['date','fourn'] = tri par date PUIS par fournisseur (tie-break).
+// ['fourn','date'] = tri par fournisseur PUIS par date. L'ordre du tableau = ordre de clic.
+let SORT_MODE_R = ['date'];
 
-function setSortModeR(mode) {
-  SORT_MODE_R = mode;
-  document.getElementById('btn-sort-date')?.classList.toggle('on', mode === 'date');
-  document.getElementById('btn-sort-fourn')?.classList.toggle('on', mode === 'fourn');
+function toggleSortModeR(mode) {
+  const idx = SORT_MODE_R.indexOf(mode);
+  if (idx > -1) {
+    // On ne retire jamais le dernier critère actif — il doit toujours en rester au moins un
+    if (SORT_MODE_R.length > 1) SORT_MODE_R.splice(idx, 1);
+  } else {
+    SORT_MODE_R.push(mode);
+  }
+  updateSortButtonsR();
   rReceptions();
+}
+
+function updateSortButtonsR() {
+  const map = { date: document.getElementById('btn-sort-date'), fourn: document.getElementById('btn-sort-fourn') };
+  Object.entries(map).forEach(([key, btn]) => {
+    if (!btn) return;
+    const active = SORT_MODE_R.includes(key);
+    btn.classList.toggle('on', active);
+    const existingBadge = btn.querySelector('.sort-badge');
+    if (existingBadge) existingBadge.remove();
+    if (active && SORT_MODE_R.length > 1) {
+      const pos = SORT_MODE_R.indexOf(key) + 1;
+      btn.insertAdjacentHTML('beforeend', ` <span class="sort-badge" style="font-size:9px;opacity:.65;font-weight:700">${pos}</span>`);
+    }
+  });
 }
 
 
@@ -1608,21 +1630,31 @@ function rReceptions(){
   // 3. Update the total order count at the top of the screen
   document.getElementById('rc-r2').textContent=(sf.length+tf.length)+' commande(s)';
 
-  // 🚀 NOUVEAU: Trie une liste de commandes selon SORT_MODE_R ('date' ou 'fourn')
-  function trierListe(list){
-    const arr=[...list];
-    if(SORT_MODE_R === 'fourn'){
-      arr.sort((a,b)=>(a.fourn||'').localeCompare(b.fourn||'', 'fr', {sensitivity:'base'}));
-    } else {
-      arr.sort((a,b)=>{
-        if(a._isLate !== b._isLate) return b._isLate - a._isLate; // Retards en premier
-        const da=parseLivraisonDate(a.livraison), db=parseLivraisonDate(b.livraison);
-        if(!da && !db) return 0;
-        if(!da) return 1;
-        if(!db) return -1;
-        return da - db;
-      });
-    }
+  // 🚀 NOUVEAU: Compare deux commandes sur le critère "date" (retards en premier, puis date croissante)
+  function compareDate(a, b) {
+    if (a._isLate !== b._isLate) return b._isLate - a._isLate;
+    const da = parseLivraisonDate(a.livraison), db = parseLivraisonDate(b.livraison);
+    if (!da && !db) return 0;
+    if (!da) return 1;
+    if (!db) return -1;
+    return da - db;
+  }
+
+  // 🚀 NOUVEAU: Compare deux commandes sur le critère "fourn" (alphabétique)
+  function compareFourn(a, b) {
+    return (a.fourn || '').localeCompare(b.fourn || '', 'fr', { sensitivity: 'base' });
+  }
+
+  // 🚀 NOUVEAU: Trie une liste selon SORT_MODE_R — applique le 1er critère, puis le 2e en cas d'égalité
+  function trierListe(list) {
+    const arr = [...list];
+    arr.sort((a, b) => {
+      for (const key of SORT_MODE_R) {
+        const cmp = key === 'fourn' ? compareFourn(a, b) : compareDate(a, b);
+        if (cmp !== 0) return cmp;
+      }
+      return 0;
+    });
     return arr;
   }
 
