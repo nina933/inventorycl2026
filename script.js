@@ -2052,7 +2052,9 @@ function rPO(){
   document.getElementById('rc-po').textContent=rows.length+' produit(s) · '+fmtM(total_montant);
   
   const bar=document.getElementById('po-budget-bar');
-  const budgetVal=semaines.reduce((s,sw)=>{const b=BUDGET.find(x=>x.sn===sw);return s+(b?b.val:0);},0);
+  // 🚀 FIX: Le budget semaine utilise désormais le même total filtré que le reste de l'onglet
+  // (avant, il venait de BUDGET/PREVISION brut, sans les exclusions kits/faible rotation/Smeg-Pavoni)
+  const budgetVal=total_montant;
   
   if(bar&&budgetVal>0){
     bar.style.display='block';
