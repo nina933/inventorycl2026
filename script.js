@@ -1649,8 +1649,8 @@ function rReceptions(){
       <div class="rg ${c._statusClass || ''}">
         <div class="rh" onclick="toggleRec('rb${prefix}${i}','arr${prefix}${i}')" style="display:flex; align-items:center; gap:12px;">
           <div style="flex:1; min-width:0;">
-            <div style="font-weight:600; font-size:15px; color:var(--t1);">${c.fourn}</div>
-            <div style="font-size:12px; color:var(--t3); margin-top:2px;">${typeLabel} #${cleanCmd} · ${c.lignes.length} produit(s) · ${fmt(c.total)} unités</div>
+            <div class="pn">${c.fourn}</div>
+            <div class="pv">${typeLabel} #${cleanCmd} · ${c.lignes.length} produit(s) · ${fmt(c.total)} unités</div>
           </div>
           <div style="text-align:right; white-space:nowrap;">
             <div style="font-size:13px; font-weight:500; color:${c._isLate?'var(--re)':'var(--t1)'};">📅 ${c.livraison}${oldDateHtml}</div>
