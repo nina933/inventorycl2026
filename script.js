@@ -1209,9 +1209,6 @@ function rAlertes(){
 
     if (isExcluded) return false;
 
-    // 🚀 NOUVEAU: Masquer les produits Smeg et Pavoni dans Alertes/Critique
-    if (estFournisseurExclu(p.fourn)) return false;
-
     // 🚀 NOUVEAU: Exclure les produits à faible rotation (< 1 vente/mois), sauf si le solde reste négatif
     if (estFaibleRotation(p.nom, p.solde)) return false;
 
@@ -1219,6 +1216,9 @@ function rAlertes(){
 
     if(!isR&&!isC)
       return false;
+
+    // 🚀 NOUVEAU: Masquer les produits Smeg et Pavoni seulement en critique (rupture reste visible)
+    if (isC && estFournisseurExclu(p.fourn)) return false;
 
     // Hide the alert if incoming orders completely solve the deficit and cover the demand
     if (p.stock + p.en_cmd >= Math.max(0, p.demande_cumulee)) {
@@ -1255,10 +1255,10 @@ function rAlertes(){
 
 
   // CALCULATE KPIs: Generate the numbers for the colorful summary boxes at the top
-  const ruptures = PRODS.filter(p => p.statut === 'rupture' && equipeMatch(p.fourn) && (p.stock + p.en_cmd) < Math.max(0, p.demande_cumulee) && !estProduitExclu(p.nom) && !estFournisseurExclu(p.fourn) && !estFaibleRotation(p.nom, p.solde)).length;
+  const ruptures = PRODS.filter(p => p.statut === 'rupture' && equipeMatch(p.fourn) && (p.stock + p.en_cmd) < Math.max(0, p.demande_cumulee) && !estProduitExclu(p.nom) && !estFaibleRotation(p.nom, p.solde)).length;
   const crit = PRODS.filter(p => p.statut === 'critique' && equipeMatch(p.fourn) && (p.stock + p.en_cmd) < p.demande_cumulee && !estProduitExclu(p.nom) && !estFournisseurExclu(p.fourn) && !estFaibleRotation(p.nom, p.solde)).length;
   const actifs = PRODS.filter(p => p.statut_produit === 'active' && equipeMatch(p.fourn)).length;
-  const pa = PRODS.filter(p => (p.statut === 'rupture' || p.statut === 'critique') && p.pareto === 'A' && p.demande_cumulee > 0 && equipeMatch(p.fourn) && (p.stock + p.en_cmd) < Math.max(0, p.demande_cumulee) && !estProduitExclu(p.nom) && !estFournisseurExclu(p.fourn) && !estFaibleRotation(p.nom, p.solde)).length;
+  const pa = PRODS.filter(p => (p.statut === 'rupture' || p.statut === 'critique') && p.pareto === 'A' && p.demande_cumulee > 0 && equipeMatch(p.fourn) && (p.stock + p.en_cmd) < Math.max(0, p.demande_cumulee) && !estProduitExclu(p.nom) && !(p.statut === 'critique' && estFournisseurExclu(p.fourn)) && !estFaibleRotation(p.nom, p.solde)).length;
 
   // Inject the KPI boxes into the HTML
   document.getElementById('mg-a').innerHTML=`
@@ -2108,8 +2108,8 @@ function rPO(){
 
     if (isExcluded) return false;
 
-    // 🚀 NOUVEAU: Masquer les produits Smeg et Pavoni dans Construire un PO
-    if (estFournisseurExclu(p.fourn)) return false;
+    // 🚀 NOUVEAU: Masquer les produits Smeg et Pavoni seulement en critique (rupture reste visible)
+    if (p.statut === 'critique' && estFournisseurExclu(p.fourn)) return false;
 
     return true;
   });
