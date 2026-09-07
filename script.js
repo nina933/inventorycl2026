@@ -84,6 +84,16 @@ let FOURNISSEURS=[],ABC_MAP={},VN1_MAP={};
 // SEL_BUDGET = Remembers if the user has clicked on a specific budget row (starts empty/null)
 let PF='all', CV='alertes', SEL_BUDGET=null;
 
+// 🚀 NOUVEAU: Mode de tri pour l'onglet Réceptions ('date' ou 'fourn')
+let SORT_MODE_R = 'date';
+
+function setSortModeR(mode) {
+  SORT_MODE_R = mode;
+  document.getElementById('btn-sort-date')?.classList.toggle('on', mode === 'date');
+  document.getElementById('btn-sort-fourn')?.classList.toggle('on', mode === 'fourn');
+  rReceptions();
+}
+
 
 let PO_EXTRAS={}; 
 let PO_CUSTOM={}; 
@@ -1385,6 +1395,38 @@ function rVentes(){
 // This tab tracks the physical boxes that are currently on trucks or boats. 
 // It groups them by Purchase Order (PO) number so the warehouse team knows exactly what is arriving.
 
+// 🚀 NOUVEAU: Parse une chaîne de livraison (dd/mm/yy ou texte flou type "Mi-septembre 2027") en objet Date
+function parseLivraisonDate(liv) {
+  if (!liv || liv === '—' || liv === 'Indéterminé') return null;
+
+  if (liv.includes('/')) {
+    const parts = liv.split('/');
+    if (parts.length === 3) {
+      let y = parseInt(parts[2]);
+      if (y < 100) y += 2000;
+      const d = new Date(y, parseInt(parts[1]) - 1, parseInt(parts[0]));
+      return isNaN(d.getTime()) ? null : d;
+    }
+    return null;
+  }
+
+  const cleanLiv = liv.normalize("NFD").replace(/[\u0300-\u036f]/g, "").toLowerCase();
+  const moisDict = {
+    'janvier': 0, 'janv': 0, 'fevrier': 1, 'fevr': 1, 'mars': 2, 'avril': 3, 'avr': 3,
+    'mai': 4, 'juin': 5, 'juillet': 6, 'juil': 6, 'aout': 7, 'septembre': 8, 'sept': 8,
+    'octobre': 9, 'oct': 9, 'novembre': 10, 'nov': 10, 'decembre': 11, 'dec': 11
+  };
+  let moisTrouve = -1;
+  for (const [nomMois, idx] of Object.entries(moisDict)) {
+    if (cleanLiv.includes(nomMois)) { moisTrouve = idx; break; }
+  }
+  if (moisTrouve === -1) return null;
+
+  const yearMatch = cleanLiv.match(/20\d{2}/);
+  const year = yearMatch ? parseInt(yearMatch[0]) : new Date().getFullYear();
+  return new Date(year, moisTrouve, 1);
+}
+
 // -----------------------------------------------------------------
 // 5. INCOMING SHIPMENTS (Confirmed POs - rReceptions)
 // -----------------------------------------------------------------
@@ -1547,7 +1589,7 @@ function rReceptions(){
         // Step C: Recalculate the PO's total units using only the visible lines
         const nouveauTotal = lignesValides.reduce((sum, l) => sum + (l.qty || 0), 0);
         
-        return { ...c, lignes: lignesValides, total: nouveauTotal, _statusClass: globalStatusClass, _isHistorical: isAllCompleted || isAllCancelled };
+        return { ...c, lignes: lignesValides, total: nouveauTotal, _statusClass: globalStatusClass, _isHistorical: isAllCompleted || isAllCancelled, _isLate: isLate };
     }).filter(c => {
         // Step D: Drop the entire PO if all its lines were filtered out
         if (c.lignes.length === 0) return false; 
@@ -1566,12 +1608,31 @@ function rReceptions(){
   // 3. Update the total order count at the top of the screen
   document.getElementById('rc-r2').textContent=(sf.length+tf.length)+' commande(s)';
 
+  // 🚀 NOUVEAU: Trie une liste de commandes selon SORT_MODE_R ('date' ou 'fourn')
+  function trierListe(list){
+    const arr=[...list];
+    if(SORT_MODE_R === 'fourn'){
+      arr.sort((a,b)=>(a.fourn||'').localeCompare(b.fourn||'', 'fr', {sensitivity:'base'}));
+    } else {
+      arr.sort((a,b)=>{
+        if(a._isLate !== b._isLate) return b._isLate - a._isLate; // Retards en premier
+        const da=parseLivraisonDate(a.livraison), db=parseLivraisonDate(b.livraison);
+        if(!da && !db) return 0;
+        if(!da) return 1;
+        if(!db) return -1;
+        return da - db;
+      });
+    }
+    return arr;
+  }
+
   // 4. Helper function to generate the HTML for a specific group of orders
   // 4. Helper function to generate the HTML for a specific group of orders
   function renderGroupe(list, titre, prefix){
     if(!list.length)return '';
-    let h=`<div class="sh"><span class="st">${titre} (${list.length})</span></div>`;
-    h+=list.map((c,i)=>{
+    const sortedList = trierListe(list);
+    let h=`<div class="sh"><span class="st">${titre} (${sortedList.length})</span></div>`;
+    h+=sortedList.map((c,i)=>{
       // 🚀 NEW: Auto-collapse if historical, even during searches
       const shouldOpen = srch.length > 0 && !c._isHistorical;
       const openCls = shouldOpen ? 'open' : '';
@@ -1586,16 +1647,20 @@ function rReceptions(){
 
       return`
       <div class="rg ${c._statusClass || ''}">
-        <div class="rh" onclick="toggleRec('rb${prefix}${i}','arr${prefix}${i}')">
-          <span class="rh-cmd">${typeLabel} #${cleanCmd}</span>
-          <span class="rh-f">${c.fourn}</span>
-          <span class="rh-d">📅 ${c.livraison}${oldDateHtml}</span>
-          <span class="rh-cnt" style="display:flex; align-items:center; gap:10px;">
-              ${c.lignes.length} produit(s) · ${fmt(c.total)} unités 
+        <div class="rh" onclick="toggleRec('rb${prefix}${i}','arr${prefix}${i}')" style="display:flex; align-items:center; gap:12px;">
+          <div style="flex:1; min-width:0;">
+            <div style="font-weight:600; font-size:15px; color:var(--t1);">${c.fourn}</div>
+            <div style="font-size:12px; color:var(--t3); margin-top:2px;">${typeLabel} #${cleanCmd} · ${c.lignes.length} produit(s) · ${fmt(c.total)} unités</div>
+          </div>
+          <div style="text-align:right; white-space:nowrap;">
+            <div style="font-size:13px; font-weight:500; color:${c._isLate?'var(--re)':'var(--t1)'};">📅 ${c.livraison}${oldDateHtml}</div>
+            ${c._isLate ? '<div style="font-size:11px;color:var(--re);font-weight:600;margin-top:2px">⚠ En retard</div>' : ''}
+          </div>
+          <div style="display:flex; align-items:center; gap:8px;">
               <!-- 🚀 NEW: The Duplication Button -->
               <button class="fb" style="padding:2px 8px; font-size:10px;" onclick="event.stopPropagation(); dupliquerCommande('${c.cmd}', '${c.fourn.replace(/'/g,"\\\\'")}', '${prefix}')">📄 Dupliquer</button>
               <span id="arr${prefix}${i}">${arrow}</span>
-          </span>
+          </div>
         </div>
         <div class="rb ${openCls}" id="rb${prefix}${i}">
           <table style="width:100%">
