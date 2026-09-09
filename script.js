@@ -689,8 +689,13 @@ async function loadData(){
       
       const variante=String(r[3]||'').trim();
 
-      // 🚀 NOUVEAU: Exclure les variantes "kit" gérées par l'app Bundle (stock déjà lié au produit parent)
-      if (/bags?\s+of|packs?\s+of|years?\s+of|box(?:es)?\s+of/i.test(variante)) { KIT_IDS.add(idVariante); return; }
+// 🚀 NOUVEAU: Exclure les variantes "kit" gérées par l'app Bundle (stock déjà lié au produit parent)
+// Exception : Jura - Lelit vend de vrais "pack of X" qui ne sont PAS des kits/bundles
+const estJuraLelit = fourn.replace(' (Café)','').trim() === 'Jura - Lelit';
+const matchKit = estJuraLelit
+  ? /bags?\s+of|years?\s+of|box(?:es)?\s+of/i.test(variante)
+  : /bags?\s+of|packs?\s+of|years?\s+of|box(?:es)?\s+of/i.test(variante);
+if (matchKit) { KIT_IDS.add(idVariante); return; }
 
       const en_cmd=n(r[13]||0);
       const pc=String(r[15]||'').trim();
