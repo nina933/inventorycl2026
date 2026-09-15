@@ -679,14 +679,14 @@ async function loadData(){
       const statR=String(r[9]||'').toLowerCase().trim();
       if(statR==='draft'||statR==='archived')return; 
       // 🚀 NEW: Read Column S (Index 18) for the Product Type to create the Mirage Supplier
-      const fournOriginal = String(r[8]||'').trim();
-      const typeProduit = String(r[18]||'').toLowerCase().trim();
-      
-      let fourn = fournOriginal;
-      if (typeProduit === 'coffee') {
-          fourn = fournOriginal + ' (Café)';
-      }
-      
+const fournOriginal = String(r[8]||'').trim();
+const typeProduit = String(r[18]||'').toLowerCase().trim();
+
+let fourn = fournOriginal;
+// Exception : Espresso Mali reste unifié, pas de séparation Café / non-Café
+if (typeProduit === 'coffee' && !fournOriginal.toLowerCase().includes('mali')) {
+    fourn = fournOriginal + ' (Café)';
+}
       const variante=String(r[3]||'').trim();
 
 // 🚀 NOUVEAU: Exclure les variantes "kit" gérées par l'app Bundle (stock déjà lié au produit parent)
