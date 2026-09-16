@@ -3855,21 +3855,6 @@ function renderLignesManuelles(){
   majTotalManuel();
 }
 
-// 🚀 NOUVEAU : Injecte dynamiquement un bouton PDF dans la zone de succès, sans dépendre du HTML
-function afficherBoutonPDFSucces(zoneId){
-  const zone = document.getElementById(zoneId);
-  if(!zone) return;
-  let btn = zone.querySelector('.pdf-succes-btn');
-  if(!btn){
-    btn = document.createElement('button');
-    btn.className = 'fb pdf-succes-btn';
-    btn.style.marginLeft = '10px';
-    btn.textContent = '📄 PDF';
-    zone.appendChild(btn);
-  }
-  btn.onclick = genererPDFCommandeManuelle;
-}
-
 function genererPDFCommandeManuelle(){
   if(!DERNIERE_COMMANDE_MANUELLE){ alert('Aucune commande à imprimer.'); return; }
   const c = DERNIERE_COMMANDE_MANUELLE;
@@ -3937,7 +3922,6 @@ async function envoyerCommandeManuelle(){
       if(successText) successText.textContent = '✓ Commande 100% personnalisée créée : ' + fakePoNumber;
       const successZone = document.getElementById('mc-success');
       if(successZone) successZone.style.display = 'flex';
-      afficherBoutonPDFSucces('mc-success');
       
       MANUAL_LINES = [];
       renderLignesManuelles();
@@ -3979,7 +3963,6 @@ async function envoyerCommandeManuelle(){
       if(successText) successText.textContent = '✓ Commande créée : ' + data.poNumber + (data.dateAvertissement ? ' — ' + data.dateAvertissement : '');
       const successZone = document.getElementById('mc-success');
       if(successZone) successZone.style.display = 'flex';
-      afficherBoutonPDFSucces('mc-success');
       
       MANUAL_LINES = [];
       renderLignesManuelles();
