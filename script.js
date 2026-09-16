@@ -679,14 +679,15 @@ async function loadData(){
       const statR=String(r[9]||'').toLowerCase().trim();
       if(statR==='draft'||statR==='archived')return; 
       // 🚀 NEW: Read Column S (Index 18) for the Product Type to create the Mirage Supplier
-const fournOriginal = String(r[8]||'').trim();
-const typeProduit = String(r[18]||'').toLowerCase().trim();
-
-let fourn = fournOriginal;
-// Exception : Espresso Mali reste unifié, pas de séparation Café / non-Café
-if (typeProduit === 'coffee' && !fournOriginal.toLowerCase().includes('mali')) {
-    fourn = fournOriginal + ' (Café)';
-}
+      const fournOriginal = String(r[8]||'').trim();
+      const typeProduit = String(r[18]||'').toLowerCase().trim();
+      
+      let fourn = fournOriginal;
+      // Exception : Espresso Mali reste unifié, pas de séparation Café / non-Café
+      if (typeProduit === 'coffee' && !fournOriginal.toLowerCase().includes('mali')) {
+          fourn = fournOriginal + ' (Café)';
+      }
+      
       const variante=String(r[3]||'').trim();
 
 // 🚀 NOUVEAU: Exclure les variantes "kit" gérées par l'app Bundle (stock déjà lié au produit parent)
@@ -3511,6 +3512,21 @@ function renderLignesModifPO(){
     if(!l.idVariante || isCustom) deltaTxt = `<span style="color:var(--am);font-size:11px">⚠ Produit personnalisé/hors catalogue — PDF uniquement, pas de synchronisation Shopify</span>`;
     else if(delta>0) deltaTxt = `<span style="color:var(--gr);font-size:11px">+${delta} (complément à envoyer)</span>`;
     else if(delta<0) deltaTxt = `<span style="color:var(--re);font-size:11px">${delta} (à ajuster manuellement dans Shopify)</span>`;
+
+    // 🚀 NOUVEAU: Récupère le MOQ et construit les badges de validation
+    const moq = MOQ_MAP[l.idVariante] || 1;
+    let validationBadge = '';
+    let moqBadge = moq > 1 
+        ? `<div style="background:var(--amb); color:var(--am); padding:2px 4px; border-radius:4px; font-size:9px; font-weight:bold; margin-top:4px; display:inline-block;">📦 Lot de ${moq}</div>` 
+        : `<div style="color:var(--t3); font-size:9px; font-weight:600; margin-top:4px;">Pas de min.</div>`;
+    if (moq > 1 && l.quantite > 0) {
+        if (l.quantite % moq === 0) {
+            validationBadge = `<div style="color:var(--gr); font-size:10px; font-weight:bold; margin-top:4px;">✅ OK</div>`;
+        } else {
+            validationBadge = `<div style="color:var(--re); font-size:10px; font-weight:bold; margin-top:4px;">⚠️ Invalide</div>`;
+        }
+    }
+    const stepVal = moq > 1 ? moq : '1';
     
     return `<div style="display:flex;align-items:center;gap:10px;padding:8px 0;border-bottom:1px solid var(--b1)">
       <div style="flex:1">
@@ -3519,7 +3535,6 @@ function renderLignesModifPO(){
         ${deltaTxt}
       </div>
       
-      <!-- 🚀 NEW: Editable SKU Input for Past POs -->
       <div style="display:flex;flex-direction:column;gap:2px;">
         <span style="font-size:10px;color:var(--t3)">SKU (Modif. PDF)</span>
         <input type="text" value="${l.sku}" style="width:100px;padding:4px;border:1px solid var(--b2);border-radius:6px;font-size:11px;" onchange="majSkuModifPOLigne(${idx},this.value)">
@@ -3527,7 +3542,11 @@ function renderLignesModifPO(){
 
       <div style="display:flex;flex-direction:column;gap:2px;align-items:center;">
         <span style="font-size:10px;color:var(--t3)">Qté (Envoyée: ${l.quantiteOriginale})</span>
-        <input type="number" min="0" value="${l.quantite}" style="width:50px;padding:4px;border:1px solid var(--b2);border-radius:6px;font-size:12px;text-align:center" onchange="majQuantiteModifPOLigne(${idx},this.value)">
+        <input type="number" min="0" step="${stepVal}" value="${l.quantite}" style="width:50px;padding:4px;border:1px solid var(--b2);border-radius:6px;font-size:12px;text-align:center" onchange="majQuantiteModifPOLigne(${idx},this.value)">
+        <div style="display:flex; flex-direction:column; align-items:center;">
+            ${moqBadge}
+            ${validationBadge}
+        </div>
       </div>
       
       <div style="display:flex;flex-direction:column;gap:2px;align-items:flex-end;">
@@ -3605,6 +3624,15 @@ async function enregistrerModifPO(){
      rPO(); 
      alert("Modifications enregistrées localement pour le PDF ! (Aucun produit Shopify à synchroniser)"); 
      return; 
+  }
+
+  // 🚀 NOUVEAU: Vérification des multiples (MOQ hard block)
+  for (let l of envoyablesShopify) {
+      const moqRequis = MOQ_MAP[l.idVariante] || 1;
+      if (moqRequis > 1 && l.quantite % moqRequis !== 0) {
+          alert(`⚠️ Arrêt : La quantité pour "${l.nom}" (${l.quantite}) n'est pas un multiple de ${moqRequis}. Modifiez la quantité pour correspondre au lot.`);
+          return;
+      }
   }
 
   if(!confirm(`Mettre à jour le transfert Shopify ${poNumber} avec les nouvelles quantités ?`)) return;
