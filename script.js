@@ -343,6 +343,14 @@ function estFournisseurExclu(fourn) {
   return clean.includes('smeg') || clean.includes('pavoni');
 }
 
+// 🚀 NOUVEAU: Exclut les pièces détachées ("Parts:") et les formats en sacs ("bags") de tout le dashboard
+function estExcluDashboard(nom, variante) {
+  const texte = String(nom || '') + ' ' + String(variante || '');
+  if (/^\s*parts\s*:/i.test(String(nom || ''))) return true; // commence par "Parts:"
+  if (/\bbags?\b/i.test(texte)) return true;                 // contient "bag" ou "bags"
+  return false;
+}
+
 
 function rForecast(){
   const srch=(document.getElementById('s-fc')?.value||'').toLowerCase();
@@ -698,6 +706,9 @@ const matchKit = estJuraLelit
   : /bags?\s+of|packs?\s+of|years?\s+of|box(?:es)?\s+of/i.test(variante);
 if (matchKit) { KIT_IDS.add(idVariante); return; }
 
+// 🚀 NOUVEAU: Exclure les pièces "Parts:" et les formats "bags" de tout le dashboard
+if (estExcluDashboard(nom, variante)) { KIT_IDS.add(idVariante); return; }
+
       const en_cmd=n(r[13]||0);
       const pc=String(r[15]||'').trim();
       const pareto=(['A','B','C'].includes(pc)?pc:(ABC_ID_MAP[idVariante]||ABC_MAP[nb]||ABC_MAP[nom]||'C'));
@@ -953,6 +964,10 @@ if (matchKit) { KIT_IDS.add(idVariante); return; }
         tc:n(r['TOTAL commandes']),tf:n(r['Total forecast']),ts:n(r['Total stock']),
         prix:coutFinal,vm:vdp.moy||0,sems,idVariante:idPrev};
     }));
+
+    // 🚀 NOUVEAU: Retirer Parts / bags des prévisions (onglet Forecast + Budget)
+    FORECAST = FORECAST.filter(f => !estExcluDashboard(f.nom));
+    PREVISION = PREVISION.filter(r => !estExcluDashboard(r.nom));
 
     // Promos
     PROMOS=pT(raw['Promos']||[]).filter(r=>(r['Produit']||r['SKU']||r['Sku'])&&(r['Date Début']||r['Date Fin'])).map(r=>{
