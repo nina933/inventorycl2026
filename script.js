@@ -745,7 +745,8 @@ if (estExcluDashboard(nom, variante)) { KIT_IDS.add(idVariante); return; }
       PRODS.push({nom,nb,variante:variante==='Default Title'?'':variante,fourn,statut_produit,stock,pareto,
       en_cmd: 0, statut: 'active', solde: 0, // 🚀 Will be dynamically calculated later
       fc_m05:fc_cur,wks_left,demande_cumulee:demandeCumulee,vt:vd.total||0,vm:vd.moy||0,vc:vd.curV||0,sems:vd.sems||{},vn1,idVariante,skuFourn,
-      cout: cout_unitaire, id: idVariante, vn1_months: vn1_months_array}); 
+      cout: cout_unitaire, id: idVariante, vn1_months: vn1_months_array,
+      fc_mois: fc}); // 🚀 NOUVEAU: forecast mensuel conservé pour la vue hebdo 
     });
 
     // 🚀 NEW: Sync the Mirage supplier names to the Forecast data
@@ -1405,12 +1406,25 @@ function rVentes(){
   const rows=sortProds(rowsFiltered,SORTS.v.col,SORTS.v.dir);
   document.getElementById('rc-v').textContent=rows.length+' produit(s)';
 
-  // Build dynamic column headers to show the exact names of the last 5 weeks
+  // 🚀 NOUVEAU: Semaine en cours + 4 semaines suivantes (réel pour la semaine en cours, forecast pour toutes)
+  const NB_SEM_FUTURES=4;
+  const anneeCourante=new Date().getFullYear();
   const dispWks=[];
-  for(let i=Math.max(1,W-5);i<=W;i++)dispWks.push('S'+String(i).padStart(2,'0'));
+  for(let i=W;i<=Math.min(52,W+NB_SEM_FUTURES);i++)dispWks.push(i);
+  const moisLbl=['M01','M02','M03','M04','M05','M06','M07','M08','M09','M10','M11','M12'];
+  // Forecast hebdo = forecast du mois de la semaine / 4.33
+  function fcSemaine(p,sem){
+    const m=getMonthFromCompanyWeek(sem,anneeCourante);
+    const v=(p.fc_mois&&p.fc_mois[moisLbl[m]])||0;
+    return v/4.33;
+  }
+  function fmtFc(v){
+    if(!(v>0))return '—';
+    return v<1?v.toLocaleString('fr-CA',{maximumFractionDigits:1}):Math.round(v).toLocaleString('fr-CA');
+  }
   document.getElementById('th-v').innerHTML=`<tr>
     <th onclick="srt('v','nom',this)">Produit</th><th onclick="srt('v','fourn',this)">Fournisseur</th><th onclick="srt('v','pareto',this)">Pareto</th>
-    ${dispWks.map(k=>`<th style="text-align:right">${k}</th>`).join('')}
+    ${dispWks.map(i=>`<th style="text-align:right">S${String(i).padStart(2,'0')}${i===W?'<div style="font-size:9px;font-weight:500;opacity:.7">en cours</div>':'<div style="font-size:9px;font-weight:500;opacity:.7">prév.</div>'}</th>`).join('')}
     <th style="text-align:right" onclick="srt('v','vt',this)">Total N</th>
     <th style="text-align:right" onclick="srt('v','vn1',this)">Total N-1</th>
     <th style="text-align:right">Croissance</th>
@@ -1432,7 +1446,16 @@ function rVentes(){
       <td><div class="pn">${cleanNom}</div>${p.variante?`<div class="pv">${p.variante}</div>`:''}</td>
       <td style="white-space:nowrap;font-size:12px">${p.fourn||'—'}</td>
       <td>${bP(p.pareto)}</td>
-      ${dispWks.map(k=>`<td style="text-align:right">${p.sems[k]>0?fmt(p.sems[k]):'—'}</td>`).join('')}
+      ${dispWks.map(i=>{
+        const fcV=fcSemaine(p,i);
+        if(i===W){
+          // Semaine en cours : vendu à date + forecast en petit
+          const k='S'+String(i).padStart(2,'0');
+          const reel=p.sems[k]||0;
+          return `<td style="text-align:right"><div style="font-weight:500">${reel>0?fmt(reel):'—'}</div><div style="font-size:10px;color:var(--gr)">prév. ${fmtFc(fcV)}</div></td>`;
+        }
+        return `<td style="text-align:right;color:var(--gr);font-weight:500">${fmtFc(fcV)}</td>`;
+      }).join('')}
       <td style="text-align:right;font-weight:500">${fmt(p.vt)}</td>
       <td style="text-align:right;color:var(--t2)">${p.vn1>0?fmt(p.vn1):'—'}</td>
       <td style="text-align:right">${growHtml}</td>
