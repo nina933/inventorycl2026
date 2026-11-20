@@ -2248,6 +2248,8 @@ function rPO(){
 
   function renderAjoutPersonnalise(f,blocId){
     const fSafe=f.replace(/'/g,"\\\\'");
+    // 🚀 NOUVEAU: En vue Technique, le produit personnalisé est créé dans Shopify (voir renderCreationTechnique)
+    if (EQUIPE_FILTER === 'technique') return renderCreationTechnique(fSafe, blocId);
     return `<div style="margin-top:8px;display:flex;gap:6px;align-items:center">
       <input type="text" placeholder="Nom du produit personnalisé…" id="cust-nom-${blocId}"
         style="flex:1.5;padding:6px 8px;border:1px solid var(--b2);border-radius:6px;font-size:12px">
@@ -4199,6 +4201,162 @@ function ajouterProduitPersonnalise(fourn, blocId){
         quantite: qte
     });
     rPO();
+}
+
+// ==========================================================
+// 🚀 NOUVEAU: CRÉATION DE PRODUIT SHOPIFY PAR L'ÉQUIPE TECHNIQUE
+// ==========================================================
+// En vue Technique, "Produit personnalisé" crée un vrai produit (ou une variante
+// d'un produit existant) dans Shopify, en brouillon, via l'Apps Script (action
+// "create_product"). L'Apps Script envoie ensuite un courriel à
+// technique@cafeliegeois.ca pour compléter la fiche. La nouvelle variante est
+// ajoutée au PO comme une vraie ligne Shopify (incluse dans le transfert).
+
+window.TP_CANDIDATS = {}; // produits parents proposés par la recherche, par bloc
+
+function renderCreationTechnique(fSafe, blocId){
+  const champ = 'padding:6px 8px;border:1px solid var(--b2);border-radius:6px;font-size:12px';
+  return `<div style="margin-top:10px;padding:12px;border:1px dashed var(--br);border-radius:8px;background:var(--bg)">
+    <div style="font-size:12px;font-weight:600;color:var(--t1);margin-bottom:8px">🛠️ Nouveau produit Technique — créé dans Shopify (brouillon) + notification à technique@cafeliegeois.ca</div>
+    <div style="display:flex;gap:6px;align-items:center;flex-wrap:wrap;margin-bottom:8px">
+      <select id="tp-mode-${blocId}" onchange="majModeTechnique('${blocId}')" style="${champ}">
+        <option value="nouveau">Nouveau produit</option>
+        <option value="variante">Variante d'un produit existant</option>
+      </select>
+      <div id="tp-parent-zone-${blocId}" style="display:none;position:relative;flex:1.5;min-width:200px">
+        <input type="text" id="tp-parent-q-${blocId}" placeholder="🔍 Produit parent (ce fournisseur)…" oninput="rechercherParentTechnique('${fSafe}','${blocId}')" style="width:100%;${champ}">
+        <input type="hidden" id="tp-parent-id-${blocId}" value="">
+        <div id="tp-parent-res-${blocId}" style="display:none;position:absolute;z-index:50;background:var(--w);border:1px solid var(--b2);border-radius:6px;width:100%;max-height:220px;overflow-y:auto;box-shadow:0 4px 12px rgba(0,0,0,.08)"></div>
+      </div>
+      <input type="text" id="tp-nom-${blocId}" placeholder="Nom du produit…" style="flex:1.5;min-width:160px;${champ}">
+      <input type="text" id="tp-var-${blocId}" placeholder="Variante (opt.)" style="flex:1;min-width:120px;${champ}">
+    </div>
+    <div style="display:flex;gap:6px;align-items:center;flex-wrap:wrap">
+      <input type="text" id="tp-sku-${blocId}" placeholder="SKU fournisseur" style="width:130px;${champ}">
+      <input type="number" min="0" step="0.01" id="tp-cout-${blocId}" placeholder="Coût unit." style="width:90px;text-align:right;${champ}">
+      <input type="number" min="0" step="0.01" id="tp-prix-${blocId}" placeholder="Prix vente (opt.)" style="width:120px;text-align:right;${champ}">
+      <input type="number" min="1" step="1" value="1" id="tp-qte-${blocId}" placeholder="Qté" style="width:60px;text-align:center;${champ}">
+      <button class="fb" id="tp-btn-${blocId}" style="padding:6px 12px;font-size:12px" onclick="creerProduitTechnique('${fSafe}','${blocId}')">+ Créer dans Shopify</button>
+    </div>
+  </div>`;
+}
+
+// Affiche ou cache la recherche du produit parent selon le mode choisi
+function majModeTechnique(blocId){
+  const mode = document.getElementById('tp-mode-'+blocId)?.value || 'nouveau';
+  const zone = document.getElementById('tp-parent-zone-'+blocId);
+  const nom = document.getElementById('tp-nom-'+blocId);
+  const vari = document.getElementById('tp-var-'+blocId);
+  if (zone) zone.style.display = mode === 'variante' ? 'block' : 'none';
+  if (nom) nom.style.display = mode === 'variante' ? 'none' : '';
+  if (vari) vari.placeholder = mode === 'variante' ? 'Nom de la nouvelle variante (obligatoire)' : 'Variante (opt.)';
+}
+
+// Recherche un produit parent chez ce fournisseur (un résultat par produit, pas par variante)
+function rechercherParentTechnique(fourn, blocId){
+  const q = (document.getElementById('tp-parent-q-'+blocId)?.value || '').toLowerCase().trim();
+  const resDiv = document.getElementById('tp-parent-res-'+blocId);
+  document.getElementById('tp-parent-id-'+blocId).value = '';
+  if (!resDiv) return;
+  if (!q) { resDiv.style.display='none'; resDiv.innerHTML=''; return; }
+
+  const vus = new Set();
+  const cands = [];
+  PRODS.forEach(p => {
+    if (p.fourn !== fourn || !p.idVariante) return;
+    const titre = p.nb || p.nom;
+    if (vus.has(titre) || !titre.toLowerCase().includes(q)) return;
+    vus.add(titre);
+    cands.push({ id: p.idVariante, titre: titre });
+  });
+  window.TP_CANDIDATS[blocId] = cands.slice(0, 15);
+
+  resDiv.style.display = 'block';
+  resDiv.innerHTML = window.TP_CANDIDATS[blocId].length
+    ? window.TP_CANDIDATS[blocId].map((c, i) => `<div style="padding:8px 12px;cursor:pointer;border-bottom:1px solid var(--b1);font-size:12px" onclick="choisirParentTechnique('${blocId}',${i})">${c.titre}</div>`).join('')
+    : '<div style="padding:10px;color:var(--t3);font-size:12px">Aucun produit trouvé pour ce fournisseur</div>';
+}
+
+function choisirParentTechnique(blocId, i){
+  const c = (window.TP_CANDIDATS[blocId] || [])[i];
+  if (!c) return;
+  document.getElementById('tp-parent-id-'+blocId).value = c.id;
+  document.getElementById('tp-parent-q-'+blocId).value = c.titre;
+  document.getElementById('tp-parent-res-'+blocId).style.display = 'none';
+}
+
+// Envoie la création à l'Apps Script, puis ajoute la nouvelle variante au PO
+async function creerProduitTechnique(fourn, blocId){
+  const val = id => (document.getElementById(id+'-'+blocId)?.value || '').trim();
+  const mode = val('tp-mode') || 'nouveau';
+  const parentId = val('tp-parent-id');
+  const nom = val('tp-nom');
+  const variante = val('tp-var');
+  const sku = val('tp-sku');
+  const cout = Math.max(0, parseFloat(val('tp-cout')) || 0);
+  const prix = Math.max(0, parseFloat(val('tp-prix')) || 0);
+  const qte = Math.max(1, parseInt(val('tp-qte'), 10) || 1);
+
+  if (mode === 'nouveau' && !nom) { alert('Indique le nom du nouveau produit.'); return; }
+  if (mode === 'variante' && !parentId) { alert('Choisis le produit parent dans la liste de recherche.'); return; }
+  if (mode === 'variante' && !variante) { alert('Indique le nom de la nouvelle variante.'); return; }
+
+  const parent = mode === 'variante' ? PRODS.find(x => x.idVariante === parentId) : null;
+  const libelle = mode === 'variante' ? ((parent ? (parent.nb || parent.nom) : 'produit parent') + ' — variante « ' + variante + ' »') : (nom + (variante ? ' — ' + variante : ''));
+  if (!confirm('Créer dans Shopify (brouillon) :\n\n' + libelle + '\nFournisseur : ' + fourn + '\n\nUne notification sera envoyée à technique@cafeliegeois.ca.')) return;
+
+  const btn = document.getElementById('tp-btn-'+blocId);
+  if (btn) { btn.disabled = true; btn.textContent = 'Création…'; }
+
+  try {
+    const data = await fetch(URL_AS, {
+      method: 'POST',
+      headers: { 'Content-Type': 'text/plain;charset=utf-8' },
+      body: JSON.stringify({
+        action: 'create_product', mode, fournisseur: fourn,
+        titre: nom, variante, parentVariantId: parentId,
+        sku, cout, prix, quantite: qte
+      })
+    }).then(r => r.json());
+
+    if (!data.success) {
+      alert('Erreur Shopify : ' + (data.error || 'inconnue'));
+      if (btn) { btn.disabled = false; btn.textContent = '+ Créer dans Shopify'; }
+      return;
+    }
+
+    // Injecte la nouvelle variante dans la mémoire du dashboard (sans recharger)
+    const idV = String(data.variantId);
+    const titreProduit = data.titreProduit || (parent ? (parent.nb || parent.nom) : nom);
+    const nomVar = data.nomVariante || '';
+    const nomComplet = nomVar ? titreProduit + ' - ' + nomVar : titreProduit;
+
+    PRODS.push({
+      nom: nomComplet, nb: titreProduit, variante: nomVar, fourn, statut_produit: 'draft', stock: 0, pareto: 'C',
+      en_cmd: 0, statut: 'active', solde: 0, fc_m05: 0, wks_left: null, demande_cumulee: 0,
+      vt: 0, vm: 0, vc: 0, sems: {}, vn1: 0, idVariante: idV, skuFourn: sku,
+      cout: cout, id: idV, vn1_months: [0,0,0,0,0,0,0,0,0,0,0,0], fc_mois: {}, equipe: 'technique'
+    });
+    TECH_IDS.add(idV);
+    TECH_NOMS.add(nomComplet);
+    if (cout > 0) COUT_MAP[idV] = cout;
+
+    // Ajoute la ligne au PO de ce fournisseur (vraie ligne Shopify → incluse dans le transfert)
+    if (!PO_EXTRAS[fourn]) PO_EXTRAS[fourn] = [];
+    PO_EXTRAS[fourn].push({ idVariante: idV, nom: nomComplet, quantite: qte });
+
+    let msg = '✓ Créé dans Shopify (brouillon) : ' + nomComplet + '\n\n';
+    msg += data.notificationEnvoyee
+      ? 'Notification envoyée à technique@cafeliegeois.ca.'
+      : '⚠️ La notification n\'a pas pu être envoyée : ' + (data.erreurNotification || 'erreur inconnue');
+    if (data.avertissements && data.avertissements.length) msg += '\n\nÀ noter :\n- ' + data.avertissements.join('\n- ');
+    alert(msg);
+
+    rPO();
+  } catch (err) {
+    alert('Erreur réseau : ' + err.message);
+    if (btn) { btn.disabled = false; btn.textContent = '+ Créer dans Shopify'; }
+  }
 }
 
 // 5. Permet de retirer un produit manuel ou personnalisé du tableau
