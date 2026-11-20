@@ -231,12 +231,18 @@ function equipeMatch(fourn, item){
   return eq.includes(EQUIPE_FILTER);
 }
 
-// 🚀 NOUVEAU: Le Budget ne concerne que l'équipe Nina (hors pièces Technique),
-// peu importe le bouton d'équipe sélectionné en haut de l'écran.
-function estBudgetNina(fourn, item){
-  if(item && estTechnique(item)) return false;
-  const cleanFourn = (fourn || '').replace(' (Café)', '').trim();
-  return (VENDOR_MAP[cleanFourn]||'').toLowerCase().includes('nina');
+// 🚀 NOUVEAU: Nom affiché de l'équipe sélectionnée (titres du Budget)
+function libelleEquipe(){
+  return {'':'Tous','nina':'Nina','clovis':'Clovis','technique':'Technique'}[EQUIPE_FILTER] || EQUIPE_FILTER;
+}
+
+// 🚀 NOUVEAU: Recalcule le Budget pour l'équipe sélectionnée (Tous / Nina / Clovis / Technique)
+function calculerBudget(){
+  BUDGET=[];
+  for(let i=1;i<=52;i++){
+    const val=PREVISION.reduce((s,r)=>equipeMatch(r.fourn, r)?s+(r.sems[i]||0)*(r.prix||0):s,0);
+    BUDGET.push({label:'Semaine '+i,val:Math.round(val),sn:i});
+  }
 }
 
 // When you click "Nina", "Clovis" or "Technique", this function executes. It highlights the button you clicked, 
@@ -245,6 +251,11 @@ function setEquipe(eq,el){
   EQUIPE_FILTER=eq;
   document.querySelectorAll('.eq-btn').forEach(b=>b.classList.remove('on'));
   el.classList.add('on');
+  // 🚀 NOUVEAU: Le Budget suit l'équipe sélectionnée
+  calculerBudget();
+  SEL_BUDGET=null;
+  const det=document.getElementById('bdet');
+  if(det) det.style.display='none';
   renderView(CV);
 }
 
@@ -339,6 +350,8 @@ function sc(v){
 // Un produit est exclu si son forecast annuel total est < 12 unités,
 // SAUF si le solde (stock + commandes en cours) reste négatif — dans ce cas il reste visible.
 function estFaibleRotation(nomProduit, soldeActuel) {
+  // 🚀 NOUVEAU: Les pièces (équipe Technique) ne sont jamais masquées pour faible rotation
+  if (TECH_NOMS.has(nomProduit)) return false;
   const fMatch = FORECAST.find(x => x.nom === nomProduit);
   let forecastAnnuel = 0;
   if (fMatch) {
@@ -1029,13 +1042,8 @@ if (estTech) { TECH_IDS.add(idVariante); TECH_NOMS.add(nom); TECH_FOURNS.add(fou
         boost,prixPromo,variante};
     });
 
-    // Budget — 🚀 MODIFIÉ: uniquement les fournisseurs de Nina (hors pièces Technique),
-    // quel que soit le bouton d'équipe sélectionné
-    BUDGET=[];
-    for(let i=1;i<=52;i++){
-      const val=PREVISION.reduce((s,r)=>estBudgetNina(r.fourn, r)?s+(r.sems[i]||0)*(r.prix||0):s,0);
-      BUDGET.push({label:'Semaine '+i,val:Math.round(val),sn:i});
-    }
+    // Budget — 🚀 MODIFIÉ: calculé pour l'équipe sélectionnée (recalculé à chaque changement d'équipe)
+    calculerBudget();
 
     FOURNISSEURS=[...new Set(PRODS.map(p=>p.fourn).filter(Boolean))].sort();
 
@@ -2461,10 +2469,20 @@ if(prods.length > 0 || (byFournHP[f] && byFournHP[f].length > 0) || dejaEnvoyesC
 // 8. FINANCIAL BUDGET (Cash Flow Prediction)
 // -----------------------------------------------------------------
 // Draws the high-level cash flow overview week by week.
-// 🚀 MODIFIÉ: Le Budget ne concerne que les fournisseurs de Nina (voir estBudgetNina)
+// 🚀 MODIFIÉ: Le Budget suit le bouton d'équipe (Tous / Nina / Clovis / Technique)
 
 function rBudget(){
   const W=cw();
+
+  // Titre dynamique selon l'équipe
+  const titre=document.querySelector('#v-budget .st');
+  if(titre) titre.textContent='Budget '+libelleEquipe()+' — Montant par semaine';
+
+  // Technique : les pièces sont exclues des prévisions automatiques, donc pas de budget prévisionnel
+  if(EQUIPE_FILTER==='technique'){
+    document.getElementById('tb-b').innerHTML='<tr><td colspan="2" style="text-align:center;padding:40px;color:var(--t3)">Les pièces (équipe Technique) sont exclues du calcul automatique des commandes : il n\'y a donc pas de budget prévisionnel pour Technique.</td></tr>';
+    return;
+  }
   document.getElementById('tb-b').innerHTML=BUDGET.map(b=>`
     <tr onclick="toggleBudget(${b.sn},'${b.label}',${b.val})" style="cursor:pointer;${SEL_BUDGET===b.sn?'background:var(--brl)':''}">
       <td>${b.label}${b.sn===W?' <span style="font-size:10px;color:var(--br);margin-left:5px">◀ courante</span>':''}</td>
@@ -2484,9 +2502,9 @@ function toggleBudget(sn,label,total){
   SEL_BUDGET=sn;
   const byF={};
   
-  // Aggregate predicted costs by supplier — 🚀 Nina uniquement
+  // Aggregate predicted costs by supplier — 🚀 équipe sélectionnée uniquement
   PREVISION.forEach(r=>{
-    if(!estBudgetNina(r.fourn, r))
+    if(!equipeMatch(r.fourn, r))
       return;
     const qty=r.sems[sn]||0;
     if(!qty||!r.fourn)
@@ -2497,9 +2515,9 @@ function toggleBudget(sn,label,total){
     byF[r.fourn].produits.push(r.nom);
   });
   
-  // Match with real POs if they already exist — 🚀 Nina uniquement
+  // Match with real POs if they already exist — 🚀 équipe sélectionnée uniquement
   STOCKY.forEach(c=>{
-    if(!estBudgetNina(c.fourn))
+    if(!equipeMatch(c.fourn))
       return;
     if(!c.livraison||c.livraison==='—') 
       return;
@@ -2519,7 +2537,7 @@ function toggleBudget(sn,label,total){
   });
   
   const fList=Object.entries(byF).sort((a,b)=>b[1].montant-a[1].montant);
-  document.getElementById('bdet-title').textContent=label+' — détail par fournisseur (Nina)';
+  document.getElementById('bdet-title').textContent=label+' — détail par fournisseur ('+libelleEquipe()+')';
   
   if(!fList.length){
     document.getElementById('bdet-body').innerHTML='<div style="text-align:center;padding:30px;color:var(--t3)">Aucune commande prévue</div>';
