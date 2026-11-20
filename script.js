@@ -121,6 +121,18 @@ let PO_EXTRAS={};
 let PO_CUSTOM={}; 
 let PRIX_OVERRIDE={}; 
 let SKU_OVERRIDE_TEMP={};
+// 🚀 NOUVEAU: Infos Technique saisies dans la confirmation de PO (n° commande client, machine, n° de série), par ID de variante
+let TECH_INFO_TEMP={};
+
+function majInfoTechTemp(idVariante, champ, valeur){
+  if(!TECH_INFO_TEMP[idVariante]) TECH_INFO_TEMP[idVariante]={};
+  TECH_INFO_TEMP[idVariante][champ]=String(valeur||'').trim();
+}
+
+function infoTech(idVariante){
+  const t=TECH_INFO_TEMP[idVariante]||{};
+  return { cmdClient: t.cmdClient||'', machine: t.machine||'', serie: t.serie||'' };
+}
 let PO_IGNORED={};
 const PRIX_FALLBACK_ID={"39423037636697":19.83,"39423037669465":158.64,"39423036424281":22.32,"39423036457049":178.56,"39505906171993":4.61,"39505906204761":46.1,"39505894735961":4.03,"39505894768729":47.0,"39286587293785":1968.6,"39379097354329":2852.6,"31133707206745":3846.0,"31133856268377":1505.0,"31133862428761":1606.0,"39505894047833":4.61,"39505894080601":46.1,"32062701142105":8696.25,"40247089332313":15.0,"40247089365081":27.0,"43204120707161":90.0,"32098752987225":806.25,"32102521372761":1668.75,"32102714474585":1946.25,"32102741082201":1308.75,"42622009081945":795.0,"42622009114713":821.25,"32113311580249":22.0,"32113329209433":15.0,"40509087449177":5810.0,"42153932980313":5810.0,"42153933013081":6125.0,"32163205382233":7341.75,"32177744183385":723.75,"42409361932377":1931.25,"42409361899609":2096.25,"42409361997913":2096.25,"32239440527449":1.5,"39286643425369":1450.0,"32382263394393":430.0,"32382263427161":430.0,"32382263459929":430.0,"39751786692697":514.5,"40467509608537":430.0,"41543633502297":430.0,"41543634288729":430.0,"40106547052633":26.21,"40106547085401":67.46,"42151907557465":19.46,"42151907590233":52.46,"32331606130777":62.6,"43204146921561":20.21,"43204146954329":121.26,"32363213258841":32.0,"43269554864217":10.0,"43269554896985":60.0,"32363222597721":10.0,"39471519531097":10.23,"39471519563865":62.0,"40430742110297":62.0,"40430742143065":50.46,"39471498657881":10.23,"40142641954905":72.0,"40430750203993":61.38,"40430750236761":50.46,"32391986380889":74.25,"39286560686169":2026.0,"39286571565145":2096.0,"39286575890521":2036.6,"39288837144665":281.25,"39768828575833":9345.0,"39768828608601":12350.0,"39768828674137":12350.0,"39768830017625":8872.0,"39768830083161":9068.0,"39768830115929":9068.0,"40523997773913":10000.0,"39305219571801":142.4,"39531804754009":76.5,"39531804786777":79.5,"39531804819545":84.0,"39305235365977":24.75,"39305244639321":190.5,"39305477226585":910.0,"39312028958809":31.5,"39312071229529":55.99,"40398413037657":20.0,"39312179101785":3.0,"39312381378649":15.0,"39797854797913":28.44,"39797854830681":33.12,"39797854863449":37.53,"39349384052825":296.25,"39349384085593":296.25,"40246770499673":371.25,"40246770466905":371.25,"39349445328985":562.5,"39356774416473":936.0,"39372578816089":115.0,"40306923602009":5.0,"41736710946905":9.22,"42190923956313":9.0,"39778636267609":7.0,"39379730399321":74.25,"39390188109913":4646.25,"39399568408665":52.46,"39399569031257":33.71,"39399570047065":32.21,"39399570243673":32.21,"39399574274137":104.96,"39420458369113":40.5,"39424787185753":29.25,"39424818643033":106.5,"42270065262681":48.0,"42270065229913":48.0,"39434677190745":11.9,"39434702782553":34.94,"39436545163353":23.03,"39438869921881":31.5,"39438923890777":73.5,"39522756427865":52.49,"39522756460633":55.99,"42727921188953":32.0,"42727921221721":32.0,"42727921254489":35.0,"40257060438105":83.25,"40257060470873":83.25,"40083939033177":3896.25,"40083939000409":3746.25,"42371511976025":8246.25,"42371512008793":8696.25,"39522762981465":52.49,"39522763014233":55.99,"39522837725273":69.99,"39531815403609":69.0,"43207052755033":63.75,"43207052787801":382.5,"39531874615385":57.71,"39668678033497":840.0,"39548266217561":840.0,"42031468970073":890.0,"39550847058009":51.75,"39550847090777":51.75,"39550896537689":927.99,"39550924554329":3519.0,"43273461694553":385.6,"43273461727321":385.6,"42484376469593":1343.99,"41827384983641":1343.99,"41827384950873":1343.99,"41568712753241":1535.99,"39592982511705":1535.99,"42484372570201":1535.99,"40401995399257":635.0,"40408832639065":675.0,"40401995432025":635.0,"39624643543129":32.0,"39624653242457":114.0,"40561531289689":201.6,"42849037221977":198.0,"40561531322457":198.0,"42849037254745":198.0,"40391467958361":1100.0,"40391513210969":2184.0,"40391513243737":2184.0,"40516151476313":410.0,"40516151443545":410.0,"41037192265817":410.0,"41037192331353":410.0,"42030647541849":410.0,"41037192298585":410.0,"41037274447961":992.0,"41037274480729":992.0,"40516235001945":2310.0,"41037280018521":3009.3,"41037280084057":3009.3,"41037280116825":3009.3,"41037280149593":3009.3,"40516293001305":630.0,"40903080476761":724.0,"41037176242265":724.0,"40903080443993":724.0,"41037180174425":724.0,"41037176209497":724.0,"42892182519897":724.0,"40516308074585":744.0,"40516567367769":1499.99,"42260065779801":24.0,"42260065812569":33.0,"40516616388697":72.0,"40516626055257":15.0,"40516639260761":15.0};
 let PO_ENVOYES={};
@@ -1928,6 +1940,7 @@ function ouvrirConfirmPO(idx, semaines) {
     }
 
     SKU_OVERRIDE_TEMP = {}; // 🚀 NEW: Wipes memory clean every time you open the modal
+    TECH_INFO_TEMP = {};    // 🚀 NOUVEAU: idem pour les infos Technique
 
     let totalCost = 0;
     const lignesHtml = lignes.map(l => {
@@ -1944,6 +1957,12 @@ function ouvrirConfirmPO(idx, semaines) {
                     <span style="color:var(--t3); font-size:10px;">SKU:</span>
                     <input type="text" value="${l.sku}" oninput="SKU_OVERRIDE_TEMP['${l.idVariante}'] = this.value" style="padding:2px 4px; border:1px solid var(--b2); border-radius:4px; font-size:11px; width:120px;" title="Modification temporaire pour le PDF">
                 </div>
+                ${EQUIPE_FILTER === 'technique' ? `
+                <div style="margin-top:6px; display:flex; gap:6px; flex-wrap:wrap;">
+                    <input type="text" placeholder="N° commande client" oninput="majInfoTechTemp('${l.idVariante}','cmdClient',this.value)" style="padding:3px 6px; border:1px solid var(--b2); border-radius:4px; font-size:11px; width:130px;">
+                    <input type="text" placeholder="Machine / moulin / accessoire" oninput="majInfoTechTemp('${l.idVariante}','machine',this.value)" style="padding:3px 6px; border:1px solid var(--b2); border-radius:4px; font-size:11px; width:200px;">
+                    <input type="text" placeholder="N° de série" oninput="majInfoTechTemp('${l.idVariante}','serie',this.value)" style="padding:3px 6px; border:1px solid var(--b2); border-radius:4px; font-size:11px; width:130px;">
+                </div>` : ''}
             </div>
             <div style="text-align:right;">
                 <div style="font-weight:600;">${fmt(l.quantite)} unités</div>
@@ -1994,7 +2013,8 @@ function telechargerPDFConfirmPO() {
             variante: r._custom ? r.variante : (p && p.variante ? p.variante : ''),
             sku: SKU_OVERRIDE_TEMP[targetId] !== undefined ? SKU_OVERRIDE_TEMP[targetId] : (p && p.skuFourn ? p.skuFourn : ''),
             qte: sems.reduce((s, sw) => s + (r.sems[sw] || 0), 0),
-            prix: r.prix || 0
+            prix: r.prix || 0,
+            ...infoTech(targetId) // 🚀 NOUVEAU: infos Technique
         };
     }).filter(l => l.qte > 0);
 
@@ -3204,10 +3224,18 @@ function ouvrirDocumentPO(fourn, poNum, dateLivraison, lignes){
   const lignesHtml = lignes.map(l => {
     const total = l.qte * l.prix;
     sousTotal += total;
+    // 🚀 NOUVEAU: infos Technique (n° commande client, machine, n° de série) sous le nom du produit
+    const escH = t => String(t).replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;');
+    const infosTech = [
+      l.cmdClient ? 'Commande client : <b>' + escH(l.cmdClient) + '</b>' : '',
+      l.machine ? 'Machine / moulin / accessoire : <b>' + escH(l.machine) + '</b>' : '',
+      l.serie ? 'N° de série : <b>' + escH(l.serie) + '</b>' : ''
+    ].filter(Boolean);
     return `<tr>
       <td style="padding:10px 0; border-bottom:1px solid #E5E0D8">
         <div style="font-weight:600">${l.nom}</div>
         ${l.variante ? `<div style="font-size:12px; color:#6B6560">${l.variante}</div>` : ''}
+        ${infosTech.length ? `<div style="font-size:11px; color:#1A1714; margin-top:5px; padding:5px 8px; background:#F5F0E8; border-radius:4px; line-height:1.6">${infosTech.join('<br>')}</div>` : ''}
       </td>
       <td style="padding:10px 0; border-bottom:1px solid #E5E0D8; font-size:12px; color:#6B6560">${l.sku || '—'}</td>
       <td style="padding:10px 0; border-bottom:1px solid #E5E0D8; text-align:center">${l.qte}</td>
@@ -3333,6 +3361,7 @@ function telechargerPDFUnPO(fourn, poNumber){
       // 🚀 FIXED: Prioritize manually saved SKUs over the catalog
       sku: l.sku !== undefined ? l.sku : (p && p.skuFourn ? p.skuFourn : '—'),
       qte: l.quantite,
+      cmdClient: l.cmdClient || '', machine: l.machine || '', serie: l.serie || '', // 🚀 NOUVEAU: infos Technique
       // 🚀 FIXED: Prioritize manually saved prices over the catalog
       prix: l.prix !== undefined ? l.prix : ((COUT_MAP[l.idVariante] || 0) || (p ? (COUT_MAP[normKey(p.nom)] || 0) : 0) || (PRIX_FALLBACK_ID[l.idVariante] || 0))
     };
@@ -3347,7 +3376,8 @@ function telechargerPDFDepuisModal(){
   if(!MODIF_PO_CTX) return;
   const {fourn, poNumber} = MODIF_PO_CTX;
   const lignes = MODIF_PO_LINES.filter(l => l.quantite > 0).map(l => ({
-    nom: l.nom, variante: l.variante || '', sku: l.sku || '—', qte: l.quantite, prix: l.prix || 0
+    nom: l.nom, variante: l.variante || '', sku: l.sku || '—', qte: l.quantite, prix: l.prix || 0,
+    cmdClient: l.cmdClient || '', machine: l.machine || '', serie: l.serie || '' // 🚀 NOUVEAU: infos Technique
   }));
   
   // 🚀 FIXED: Use calendar date, fallback to fuzzy text, fallback to '-'
@@ -3393,7 +3423,8 @@ async function envoyerCommandeFournisseur(idx, semaines){
         variante: r._custom ? r.variante : (p&&p.variante?p.variante:''), 
         // 🚀 NEW: Checks the override memory first. If empty, uses the original catalog SKU.
         sku: SKU_OVERRIDE_TEMP[targetId] !== undefined ? SKU_OVERRIDE_TEMP[targetId] : (p&&p.skuFourn?p.skuFourn:''), 
-        prix: r.prix || 0
+        prix: r.prix || 0,
+        ...infoTech(targetId) // 🚀 NOUVEAU: infos Technique
     };
   }).filter(l => l.idVariante && l.quantite > 0);
 
@@ -3441,7 +3472,7 @@ async function envoyerCommandeFournisseur(idx, semaines){
       if(!PO_ENVOYES[fourn]) PO_ENVOYES[fourn]=[];
       PO_ENVOYES[fourn].push({
           poNumber: fakePoNumber, 
-          lignes: toutesLignes.map(l=>({idVariante:l.idVariante,quantite:l.quantite,nom:l.nom,variante:l.variante,sku:l.sku})), 
+          lignes: toutesLignes.map(l=>({idVariante:l.idVariante,quantite:l.quantite,nom:l.nom,variante:l.variante,sku:l.sku,cmdClient:l.cmdClient,machine:l.machine,serie:l.serie})), 
           date: new Date().toISOString()
       });
       alert('✓ Commande 100% personnalisée créée : ' + fakePoNumber);
@@ -3456,7 +3487,14 @@ async function envoyerCommandeFournisseur(idx, semaines){
     // 🚀 FIXED: Combine the auto-note with the user's custom note
     const baseNote = 'Commande créée depuis le dashboard - semaine(s) ' + sems.map(s=>'S'+String(s).padStart(2,'0')).join(', ') + (dejaEnvoyes.length?' (complément)':'');
     const customNote = document.getElementById('cpo-note') ? document.getElementById('cpo-note').value.trim() : '';
-    const note = customNote ? customNote + '\n\n' + baseNote : baseNote;
+    let note = customNote ? customNote + '\n\n' + baseNote : baseNote;
+
+    // 🚀 NOUVEAU: Les infos Technique sont aussi écrites dans la note du transfert Shopify (gardées après rechargement)
+    const lignesInfoTech = toutesLignes.filter(l => l.cmdClient || l.machine || l.serie).map(l =>
+      '- ' + l.nom + (l.variante ? ' (' + l.variante + ')' : '') + ' : ' +
+      [l.cmdClient ? 'commande client ' + l.cmdClient : '', l.machine ? 'machine ' + l.machine : '', l.serie ? 'n° de série ' + l.serie : ''].filter(Boolean).join(', ')
+    );
+    if (lignesInfoTech.length) note += '\n\nInfos Technique :\n' + lignesInfoTech.join('\n');
     
     const fournReel = fourn.replace(' (Café)', '').trim();
     const data = await envoyerLignesAuBackend(fournReel, note, lignesShopify, dateLivraison);
@@ -3466,7 +3504,7 @@ async function envoyerCommandeFournisseur(idx, semaines){
       // We re-glue all lines (custom + shopify) into local memory for the PDF
       PO_ENVOYES[fourn].push({
           poNumber:data.poNumber, 
-          lignes: toutesLignes.map(l=>({idVariante:l.idVariante,quantite:l.quantite,nom:l.nom,variante:l.variante,sku:l.sku})), 
+          lignes: toutesLignes.map(l=>({idVariante:l.idVariante,quantite:l.quantite,nom:l.nom,variante:l.variante,sku:l.sku,cmdClient:l.cmdClient,machine:l.machine,serie:l.serie})), 
           date:new Date().toISOString()
       });
       
@@ -3508,7 +3546,8 @@ function ouvrirModifPO(fourn, poNumber){
       sku: l.sku || (p&&p.skuFourn?p.skuFourn:''),
       quantiteOriginale: l.quantite,
       quantite: l.quantite,
-      prix: p ? (COUT_MAP[l.idVariante]||COUT_MAP[normKey(p.nom)]||PRIX_FALLBACK_ID[l.idVariante]||0) : 0
+      prix: p ? (COUT_MAP[l.idVariante]||COUT_MAP[normKey(p.nom)]||PRIX_FALLBACK_ID[l.idVariante]||0) : 0,
+      cmdClient: l.cmdClient || '', machine: l.machine || '', serie: l.serie || '' // 🚀 NOUVEAU: infos Technique
     };
   });
 
