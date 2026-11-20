@@ -1803,8 +1803,8 @@ function rReceptions(){
             ${c._isLate ? '<div style="font-size:11px;color:var(--re);font-weight:600;margin-top:2px">⚠ En retard</div>' : ''}
           </div>
           <div style="display:flex; align-items:center; gap:8px;">
-              <!-- 🚀 NEW: The Duplication Button -->
-              <button class="fb" style="padding:2px 8px; font-size:10px;" onclick="event.stopPropagation(); dupliquerCommande('${c.cmd}', '${c.fourn.replace(/'/g,"\\\\'")}', '${prefix}')">📄 Dupliquer</button>
+              <!-- 🚀 NEW: The Duplication Button (masqué en vue Technique : il ouvre la commande manuelle) -->
+              ${EQUIPE_FILTER === 'technique' ? '' : `<button class="fb" style="padding:2px 8px; font-size:10px;" onclick="event.stopPropagation(); dupliquerCommande('${c.cmd}', '${c.fourn.replace(/'/g,"\\\\'")}', '${prefix}')">📄 Dupliquer</button>`}
               <span id="arr${prefix}${i}">${arrow}</span>
           </div>
         </div>
@@ -1862,7 +1862,7 @@ function dupliquerCommande(cmdId, fourn, prefix) {
     }
     
     // 2. Open the Manual Order Modal
-    ouvrirCommandeManuelle();
+    if (ouvrirCommandeManuelle() === false) return;
     
     // 3. Auto-fill the supplier
     document.getElementById('mc-fourn').value = fourn;
@@ -2033,6 +2033,10 @@ function telechargerPDFConfirmPO() {
 
 function rPO(){
   const W=cw();
+
+  // 🚀 NOUVEAU: Pas de commande manuelle en vue Technique (bouton masqué)
+  const btnCmdManuelle=document.querySelector('#v-po button[onclick="ouvrirCommandeManuelle()"]');
+  if(btnCmdManuelle) btnCmdManuelle.style.display = EQUIPE_FILTER==='technique' ? 'none' : '';
   let semaines=gC('swpo').map(Number).filter(n=>!isNaN(n)).sort((a,b)=>a-b);
   if(!semaines.length)semaines=[W];
   const swRef=semaines[0]; // semaine de référence pour les ajouts manuels/personnalisés
@@ -2337,6 +2341,7 @@ if(prods.length > 0 || (byFournHP[f] && byFournHP[f].length > 0) || dejaEnvoyesC
             </select>
             <button class="rbtn" onclick="const v=document.getElementById('sel-po-${idx}').value; if(v) ouvrirModifPO('${fSafe2}', v)" style="margin-left:4px; color:var(--gr); border:none; padding:4px 8px; font-weight:600;" title="Modifier le PO sélectionné">✏️ Modifier</button>
             <button class="rbtn" onclick="const v=document.getElementById('sel-po-${idx}').value; if(v) telechargerPDFUnPO('${fSafe2}', v)" style="margin-left:4px; color:var(--gr); border:none; border-left:1px solid var(--gr); border-radius:0; padding:4px 8px; font-weight:600;" title="Télécharger le PDF du PO sélectionné">📄 PDF</button>
+            ${EQUIPE_FILTER === 'technique' ? `<button class="rbtn" onclick="const v=document.getElementById('sel-po-${idx}').value; if(v) preparerCourrielTechnique('${fSafe2}', v)" style="margin-left:4px; color:var(--gr); border:none; border-left:1px solid var(--gr); border-radius:0; padding:4px 8px; font-weight:600;" title="Préparer le courriel au fournisseur dans tech@ (PDF joint)">✉️ Courriel</button>` : ''}
           </div>
         `;
       }
@@ -3216,94 +3221,91 @@ function simulerLigne(targetId, capitalDisponible) {
  * @param {string} dateLivraison - Date d'arrivée estimée
  * @param {Array} lignes - Liste des lignes [{nom, variante, sku, qte, prix}]
  */
-function ouvrirDocumentPO(fourn, poNum, dateLivraison, lignes){
+// 🚀 MODIFIÉ: Le HTML du PO est construit par construireHtmlPO, mis en page avec des tableaux
+// pour être identique à l'impression ET dans le PDF joint au courriel (généré par Apps Script).
+function construireHtmlPO(fourn, poNum, dateLivraison, lignes, avecImpression){
   const today = new Date().toLocaleDateString('fr-CA', {day:'numeric', month:'long', year:'numeric'});
   const fmt2 = v => n(v).toLocaleString('fr-CA', {minimumFractionDigits:2, maximumFractionDigits:2})+' $';
+  const escH = t => String(t == null ? '' : t).replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;');
+  const td = 'padding:10px 0; border-bottom:1px solid #E5E0D8; vertical-align:top';
+  const th = 'text-align:left; font-size:11px; font-weight:bold; text-transform:uppercase; letter-spacing:.04em; padding-bottom:10px; border-bottom:2px solid #1A1714';
+  const lbl = 'font-size:11px; font-weight:bold; text-transform:uppercase; letter-spacing:.05em; color:#1A1714; padding-bottom:8px';
+  const val = 'font-size:13px; color:#1A1714; line-height:1.5';
 
   let sousTotal = 0;
   const lignesHtml = lignes.map(l => {
     const total = l.qte * l.prix;
     sousTotal += total;
-    // 🚀 NOUVEAU: infos Technique (n° commande client, machine, n° de série) sous le nom du produit
-    const escH = t => String(t).replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;');
+    // Infos Technique (n° commande client, machine, n° de série) sous le nom du produit
     const infosTech = [
       l.cmdClient ? 'Commande client : <b>' + escH(l.cmdClient) + '</b>' : '',
       l.machine ? 'Machine / moulin / accessoire : <b>' + escH(l.machine) + '</b>' : '',
       l.serie ? 'N° de série : <b>' + escH(l.serie) + '</b>' : ''
     ].filter(Boolean);
     return `<tr>
-      <td style="padding:10px 0; border-bottom:1px solid #E5E0D8">
-        <div style="font-weight:600">${l.nom}</div>
-        ${l.variante ? `<div style="font-size:12px; color:#6B6560">${l.variante}</div>` : ''}
-        ${infosTech.length ? `<div style="font-size:11px; color:#1A1714; margin-top:5px; padding:5px 8px; background:#F5F0E8; border-radius:4px; line-height:1.6">${infosTech.join('<br>')}</div>` : ''}
+      <td style="${td}">
+        <div style="font-weight:bold">${escH(l.nom)}</div>
+        ${l.variante ? `<div style="font-size:12px; color:#6B6560">${escH(l.variante)}</div>` : ''}
+        ${infosTech.length ? `<div style="font-size:11px; color:#1A1714; margin-top:5px; padding:5px 8px; background:#F5F0E8; line-height:1.6">${infosTech.join('<br>')}</div>` : ''}
       </td>
-      <td style="padding:10px 0; border-bottom:1px solid #E5E0D8; font-size:12px; color:#6B6560">${l.sku || '—'}</td>
-      <td style="padding:10px 0; border-bottom:1px solid #E5E0D8; text-align:center">${l.qte}</td>
-      <td style="padding:10px 0; border-bottom:1px solid #E5E0D8; text-align:right">${fmt2(l.prix)}</td>
-      <td style="padding:10px 0; border-bottom:1px solid #E5E0D8; text-align:right">0%</td>
-      <td style="padding:10px 0; border-bottom:1px solid #E5E0D8; text-align:right; font-weight:600">${fmt2(total)}</td>
+      <td style="${td}; font-size:12px; color:#6B6560">${escH(l.sku || '—')}</td>
+      <td style="${td}; text-align:center">${l.qte}</td>
+      <td style="${td}; text-align:right">${fmt2(l.prix)}</td>
+      <td style="${td}; text-align:right">0%</td>
+      <td style="${td}; text-align:right; font-weight:bold">${fmt2(total)}</td>
     </tr>`;
   }).join('');
 
   const ADRESSE = 'Café Liégeois Canada Inc.<br>5524 Rue Saint-Patrick<br>Suite 140<br>Montréal QC H4E 1A8<br>Canada';
-  const fournReel = fourn.replace(' (Café)', '').trim(); // 🚀 NEW: Strip the tag
-  const fournSafe = fournReel.replace(/</g, '&lt;');
+  const fournSafe = escH(fourn.replace(' (Café)', '').trim()); // 🚀 NEW: Strip the tag
+  const col = (titre, contenu) => `<td style="width:33%; vertical-align:top; padding-right:20px"><div style="${lbl}">${titre}</div><div style="${val}">${contenu}</div></td>`;
 
-  const html = `<!DOCTYPE html><html lang="fr"><head><meta charset="UTF-8"><title>PO — ${fournSafe}</title>
+  return `<!DOCTYPE html><html lang="fr"><head><meta charset="UTF-8"><title>PO — ${fournSafe}</title>
   <style>
-    *{box-sizing:border-box}
-    body{font-family:-apple-system,'Helvetica Neue',Arial,sans-serif; color:#1A1714; padding:50px 60px; max-width:900px; margin:0 auto}
-    .topline{display:flex; justify-content:space-between; font-size:13px; color:#6B6560; margin-bottom:34px}
-    .titleline{display:flex; justify-content:space-between; align-items:flex-start; margin-bottom:34px}
-    h1{font-size:30px; font-weight:700; margin:0}
-    .ponum{text-align:right; font-size:14px; line-height:1.5}
-    .ponum .n{font-weight:700; font-size:16px}
-    .cols3{display:flex; gap:40px; margin-bottom:22px}
-    .cols3 > div{flex:1}
-    .lbl{font-size:11px; font-weight:700; text-transform:uppercase; letter-spacing:.05em; color:#1A1714; margin-bottom:8px}
-    .val{font-size:13px; color:#1A1714; line-height:1.5}
-    hr{border:none; border-top:2px solid #1A1714; margin:22px 0}
-    table{width:100%; border-collapse:collapse; font-size:13px}
-    th{text-align:left; font-size:11px; font-weight:700; text-transform:uppercase; letter-spacing:.04em; padding-bottom:10px; border-bottom:2px solid #1A1714}
-    .sum{width:320px; margin-left:auto; margin-top:20px; font-size:13px}
-    .sum div{display:flex; justify-content:space-between; padding:6px 0}
-    .sum .tot{border-top:2px solid #1A1714; font-weight:700; font-size:15px; padding-top:10px; margin-top:6px}
-    .foot{margin-top:60px; padding-top:16px; border-top:1px solid #D5CFC6; font-size:12px; color:#6B6560}
+    body{font-family:Arial,'Helvetica Neue',sans-serif; color:#1A1714; padding:40px 50px; max-width:900px; margin:0 auto}
+    table{border-collapse:collapse}
     @media print{ body{padding:20px 40px} }
   </style></head><body>
-    <div class="topline"><span>Café Liégeois Canada Inc.</span><span>#${poNum}</span></div>
-    <div class="titleline">
-      <h1>Café Liégeois Canada Inc.</h1>
-      <div class="ponum"><div class="n">#${poNum}</div><div>${today}</div></div>
-    </div>
-    <div class="cols3">
-      <div><div class="lbl">Fournisseur</div><div class="val">${fournSafe}</div></div>
-      <div><div class="lbl">Expédier à</div><div class="val">${ADRESSE}</div></div>
-      <div><div class="lbl">Facturer à</div><div class="val">${ADRESSE}</div></div>
-    </div>
-    <div class="cols3">
-      <div><div class="lbl">Modalités de paiement</div><div class="val">Paiement à la livraison</div></div>
-      <div><div class="lbl">Devise du fournisseur</div><div class="val">CAD</div></div>
-      <div><div class="lbl">Arrivée estimée</div><div class="val">${dateLivraison}</div></div>
-    </div>
-    <hr>
-    <table>
-      <thead><tr><th>Produits</th><th>SKU du fournisseur</th><th style="text-align:center">Qté</th><th style="text-align:right">Coût</th><th style="text-align:right">Taxe</th><th style="text-align:right">Total (CAD)</th></tr></thead>
+    <table style="width:100%; font-size:13px; color:#6B6560; margin-bottom:30px"><tr>
+      <td>Café Liégeois Canada Inc.</td><td style="text-align:right">#${escH(poNum)}</td>
+    </tr></table>
+    <table style="width:100%; margin-bottom:30px"><tr>
+      <td style="font-size:28px; font-weight:bold; vertical-align:top">Café Liégeois Canada Inc.</td>
+      <td style="text-align:right; font-size:14px; line-height:1.5; vertical-align:top"><div style="font-weight:bold; font-size:16px">#${escH(poNum)}</div><div>${today}</div></td>
+    </tr></table>
+    <table style="width:100%; margin-bottom:22px"><tr>
+      ${col('Fournisseur', fournSafe)}${col('Expédier à', ADRESSE)}${col('Facturer à', ADRESSE)}
+    </tr></table>
+    <table style="width:100%; margin-bottom:22px"><tr>
+      ${col('Modalités de paiement', 'Paiement à la livraison')}${col('Devise du fournisseur', 'CAD')}${col('Arrivée estimée', escH(dateLivraison))}
+    </tr></table>
+    <div style="border-top:2px solid #1A1714; margin:22px 0"></div>
+    <table style="width:100%; font-size:13px">
+      <thead><tr>
+        <th style="${th}">Produits</th><th style="${th}">SKU du fournisseur</th><th style="${th}; text-align:center">Qté</th>
+        <th style="${th}; text-align:right">Coût</th><th style="${th}; text-align:right">Taxe</th><th style="${th}; text-align:right">Total (CAD)</th>
+      </tr></thead>
       <tbody>${lignesHtml}</tbody>
     </table>
-    <div class="sum">
-      <div><span>Taxes (incluses)</span><span>${fmt2(0)}</span></div>
-      <div><span>Sous-total (${lignes.length} article${lignes.length>1?'s':''})</span><span>${fmt2(sousTotal)}</span></div>
-      <div class="tot"><span>Total</span><span>${fmt2(sousTotal)}</span></div>
-    </div>
-    <div class="foot">
-      <div style="font-weight:700; margin-bottom:4px">Café Liégeois Canada Inc.</div>
+    <table style="width:320px; margin-left:auto; margin-top:20px; font-size:13px">
+      <tr><td style="padding:6px 0">Taxes (incluses)</td><td style="padding:6px 0; text-align:right">${fmt2(0)}</td></tr>
+      <tr><td style="padding:6px 0">Sous-total (${lignes.length} article${lignes.length>1?'s':''})</td><td style="padding:6px 0; text-align:right">${fmt2(sousTotal)}</td></tr>
+      <tr><td style="border-top:2px solid #1A1714; font-weight:bold; font-size:15px; padding-top:10px">Total</td><td style="border-top:2px solid #1A1714; font-weight:bold; font-size:15px; padding-top:10px; text-align:right">${fmt2(sousTotal)}</td></tr>
+    </table>
+    <div style="margin-top:60px; padding-top:16px; border-top:1px solid #D5CFC6; font-size:12px; color:#6B6560">
+      <div style="font-weight:bold; margin-bottom:4px">Café Liégeois Canada Inc.</div>
       <div>5524 Rue Saint-Patrick</div>
       <div>info@cafeliegeois.ca</div>
     </div>
-    <script>window.onload=()=>setTimeout(()=>window.print(),300);<\/script>
+    ${avecImpression ? '<script>window.onload=()=>setTimeout(()=>window.print(),300);<\/script>' : ''}
   </body></html>`;
+}
 
+/**
+ * Ouvre le document PO dans un nouvel onglet et lance l'impression (enregistrer en PDF)
+ */
+function ouvrirDocumentPO(fourn, poNum, dateLivraison, lignes){
+  const html = construireHtmlPO(fourn, poNum, dateLivraison, lignes, true);
   const w = window.open('', '_blank');
   if(!w){ alert("Le navigateur a bloqué l'ouverture de la fenêtre. Autorisez les pop-ups pour ce site."); return; }
   w.document.write(html);
@@ -3351,9 +3353,16 @@ function genererPDFPO(idx, semaines){
  * Télécharge le document PDF d'un seul PO ciblé spécifiquement
  */
 function telechargerPDFUnPO(fourn, poNumber){
+  const lignes = lignesPDFUnPO(fourn, poNumber);
+  if(!lignes){ alert('PO introuvable.'); return; }
+  ouvrirDocumentPO(fourn, poNumber, '-', lignes);
+}
+
+// Prépare les lignes d'un PO envoyé pour le PDF (impression ou courriel). Retourne null si le PO est introuvable.
+function lignesPDFUnPO(fourn, poNumber){
   const entree = (PO_ENVOYES[fourn] || []).find(e => e.poNumber === poNumber);
-  if(!entree){ alert('PO introuvable.'); return; }
-  const lignes = entree.lignes.filter(l => l.quantite > 0).map(l => {
+  if(!entree) return null;
+  return entree.lignes.filter(l => l.quantite > 0).map(l => {
     const p = PRODS.find(x => x.idVariante === l.idVariante);
     return {
       nom: l.nom || (p ? p.nom : '(produit non identifié)'),
@@ -3366,7 +3375,31 @@ function telechargerPDFUnPO(fourn, poNumber){
       prix: l.prix !== undefined ? l.prix : ((COUT_MAP[l.idVariante] || 0) || (p ? (COUT_MAP[normKey(p.nom)] || 0) : 0) || (PRIX_FALLBACK_ID[l.idVariante] || 0))
     };
   });
-  ouvrirDocumentPO(fourn, poNumber, '-', lignes);
+}
+
+// 🚀 NOUVEAU: Prépare un brouillon de courriel dans la boîte tech@cafeliegeois.ca, avec le PO en PDF
+async function preparerCourrielTechnique(fourn, poNumber, dateLivraisonFmt){
+  const lignes = lignesPDFUnPO(fourn, poNumber);
+  if(!lignes || !lignes.length){ alert('PO introuvable ou vide.'); return; }
+
+  const html = construireHtmlPO(fourn, poNumber, dateLivraisonFmt || '-', lignes, false);
+  try {
+    const data = await fetch(URL_AS, { // 🚀 Même Apps Script que le reste (action "draft_po")
+      method: 'POST',
+      headers: { 'Content-Type': 'text/plain;charset=utf-8' },
+      body: JSON.stringify({ action: 'draft_po', fournisseur: fourn.replace(' (Café)', '').trim(), poNumber: poNumber, html: html })
+    }).then(r => r.json());
+
+    if(!data.success){ alert('Erreur lors de la préparation du courriel : ' + (data.error || 'inconnue')); return; }
+
+    let msg = '✉️ Brouillon prêt dans la boîte tech@cafeliegeois.ca (PO ' + poNumber + ' en pièce jointe).';
+    msg += data.to ? '\nDestinataire : ' + data.to : '\n⚠️ Aucune adresse enregistrée pour ce fournisseur : ajoute-la dans le brouillon.';
+    if(confirm(msg + '\n\nOuvrir les brouillons de tech@ ?')){
+      window.open('https://mail.google.com/mail/u/?authuser=tech%40cafeliegeois.ca#drafts', '_blank');
+    }
+  } catch(err){
+    alert('Erreur réseau (courriel Technique) : ' + err.message);
+  }
 }
 
 /**
@@ -3514,6 +3547,13 @@ async function envoyerCommandeFournisseur(idx, semaines){
         alert('✓ Commande créée : ' + data.poNumber + (data.dateAvertissement ? ' — ' + data.dateAvertissement : ''));
       }
       rPO();
+      // 🚀 NOUVEAU: En vue Technique, proposer le brouillon de courriel au fournisseur (PDF joint)
+      if (EQUIPE_FILTER === 'technique' && confirm('Préparer le brouillon de courriel au fournisseur dans tech@cafeliegeois.ca, avec le PO en PDF ?')) {
+        const dateFmtCourriel = dateLivraison
+          ? new Date(dateLivraison + 'T00:00:00').toLocaleDateString('fr-CA', {day:'numeric', month:'long', year:'numeric'})
+          : '-';
+        preparerCourrielTechnique(fourn, data.poNumber, dateFmtCourriel);
+      }
     } else {
       let msg = 'Erreur : ' + (data.error || 'inconnue');
       if(data.lignesIgnorees && data.lignesIgnorees.length > 0){
@@ -3835,6 +3875,11 @@ let MANUAL_LINES = [];
 let DERNIERE_COMMANDE_MANUELLE = null; 
 
 function ouvrirCommandeManuelle(){
+  // 🚀 NOUVEAU: Commande manuelle non disponible en vue Technique
+  if (EQUIPE_FILTER === 'technique') {
+    alert("La commande manuelle n'est pas disponible en vue Technique. Utilise Construire un PO.");
+    return false;
+  }
   MANUAL_LINES = [];
   DERNIERE_COMMANDE_MANUELLE = null;
   document.getElementById('mc-fourn').value = '';
