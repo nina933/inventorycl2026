@@ -155,6 +155,9 @@ let VENDOR_MAP={};
 // A sticky note that remembers which team member's button is currently clicked at the top of the screen.
 let EQUIPE_FILTER='';
 
+// 🚀 NOUVEAU: Produits de l'équipe Technique (Type de produit = parts)
+let TECH_IDS=new Set(), TECH_NOMS=new Set(), TECH_FOURNS=new Set();
+
 // NOUVEAU: Mémoire pour cacher les doublons "Déjà dans PO"
 let PO_HIDDEN_DUPLICATES = {};
 
@@ -196,20 +199,48 @@ function createKey(name, variant) {
     return normalize(cleanName + " " + finalVariant);
 }
 
-// Checks the master phonebook (VENDOR_MAP) to see if a specific supplier
-// belongs to the team member currently selected at the top of the screen.
-function equipeMatch(fourn){
+// 🚀 NOUVEAU: Détecte si un produit / une ligne appartient à l'équipe Technique
+// (Type de produit "parts" ou nom commençant par "Parts:")
+function estTechnique(item){
+  if(!item) return false;
+  if(item.equipe) return item.equipe==='technique';
+  const id=String(item.idVariante||'');
+  if(id && TECH_IDS.has(id)) return true;
+  return !!item.nom && TECH_NOMS.has(item.nom);
+}
+
+// Vérifie si un fournisseur (ou un produit précis, si "item" est fourni) appartient
+// à l'équipe sélectionnée en haut de l'écran. Les produits Technique passent AVANT
+// la correspondance fournisseur (un même fournisseur peut avoir des machines chez Nina
+// et des pièces chez Technique).
+function equipeMatch(fourn, item){
   if(!EQUIPE_FILTER)
     return true;
+
+  if(item){
+    if(estTechnique(item)) return EQUIPE_FILTER==='technique';
+    if(EQUIPE_FILTER==='technique') return false;
+  } else if(EQUIPE_FILTER==='technique'){
+    // Niveau fournisseur seulement : le fournisseur a-t-il au moins une pièce ?
+    return TECH_FOURNS.has((fourn||'').trim());
+  }
   
-  // 🚀 NEW: Strip the Mirage tag so Nina/Clovis routing still works perfectly
+  // Strip the Mirage tag so Nina/Clovis routing still works perfectly
   const cleanFourn = (fourn || '').replace(' (Café)', '').trim();
   const eq=(VENDOR_MAP[cleanFourn]||'').toLowerCase();
   return eq.includes(EQUIPE_FILTER);
 }
 
-// When you click "Nina" or "Clovis", this function executes. It highlights the button you clicked, 
-// filters the supplier dropdown menu to only show their specific vendors, and instantly refreshes the screen.
+// 🚀 NOUVEAU: Le Budget ne concerne que l'équipe Nina (hors pièces Technique),
+// peu importe le bouton d'équipe sélectionné en haut de l'écran.
+function estBudgetNina(fourn, item){
+  if(item && estTechnique(item)) return false;
+  const cleanFourn = (fourn || '').replace(' (Café)', '').trim();
+  return (VENDOR_MAP[cleanFourn]||'').toLowerCase().includes('nina');
+}
+
+// When you click "Nina", "Clovis" or "Technique", this function executes. It highlights the button you clicked, 
+// and instantly refreshes the screen.
 function setEquipe(eq,el){
   EQUIPE_FILTER=eq;
   document.querySelectorAll('.eq-btn').forEach(b=>b.classList.remove('on'));
@@ -343,10 +374,10 @@ function estFournisseurExclu(fourn) {
   return clean.includes('smeg') || clean.includes('pavoni');
 }
 
-// 🚀 NOUVEAU: Exclut les pièces détachées ("Parts:") et les formats en sacs ("bags") de tout le dashboard
+// Exclut les formats en sacs ("bags") de tout le dashboard
+// 🚀 MODIFIÉ: les pièces "Parts:" ne sont plus exclues — elles sont attribuées à l'équipe Technique
 function estExcluDashboard(nom, variante) {
   const texte = String(nom || '') + ' ' + String(variante || '');
-  if (/^\s*parts\s*:/i.test(String(nom || ''))) return true; // commence par "Parts:"
   if (/\bbags?\b/i.test(texte)) return true;                 // contient "bag" ou "bags"
   return false;
 }
@@ -356,7 +387,7 @@ function rForecast(){
   const srch=(document.getElementById('s-fc')?.value||'').toLowerCase();
   const fourns=gC('ffc'),pars=gC('pfc');
   let rowsFc=FORECAST.filter(r=>{
-    if(!equipeMatch(r.fourn))return false;
+    if(!equipeMatch(r.fourn, r))return false;
     if(fourns.length&&!fourns.includes(r.fourn))return false;
     if(pars.length&&!pars.includes(r.cat))return false;
     if(srch&&!r.nom.toLowerCase().includes(srch))return false;
@@ -675,6 +706,7 @@ async function loadData(){
     const seen=new Set();
     PRODS=[];
     KIT_IDS=new Set(); // 🚀 Réinitialisé à chaque chargement
+    TECH_IDS=new Set(); TECH_NOMS=new Set(); TECH_FOURNS=new Set(); // 🚀 NOUVEAU: équipe Technique
     sRows.slice(1).forEach(r=>{
       const nom=String(r[1]||r[2]||'').trim().replace(/\s*\|\s*$/,'');
       if(!nom||nom==='Clé produit'||nom.startsWith('Dernière')||nom.startsWith('Actualisation'))return;
@@ -706,8 +738,12 @@ const matchKit = estJuraLelit
   : /bags?\s+of|packs?\s+of|years?\s+of|box(?:es)?\s+of/i.test(variante);
 if (matchKit) { KIT_IDS.add(idVariante); return; }
 
-// 🚀 NOUVEAU: Exclure les pièces "Parts:" et les formats "bags" de tout le dashboard
+// Exclure les formats "bags" de tout le dashboard
 if (estExcluDashboard(nom, variante)) { KIT_IDS.add(idVariante); return; }
+
+// 🚀 NOUVEAU: Type de produit "parts" (ou nom "Parts:") → équipe Technique
+const estTech = typeProduit === 'parts' || /^\s*parts\s*:/i.test(nom);
+if (estTech) { TECH_IDS.add(idVariante); TECH_NOMS.add(nom); TECH_FOURNS.add(fourn); }
 
       const en_cmd=n(r[13]||0);
       const pc=String(r[15]||'').trim();
@@ -746,7 +782,8 @@ if (estExcluDashboard(nom, variante)) { KIT_IDS.add(idVariante); return; }
       en_cmd: 0, statut: 'active', solde: 0, // 🚀 Will be dynamically calculated later
       fc_m05:fc_cur,wks_left,demande_cumulee:demandeCumulee,vt:vd.total||0,vm:vd.moy||0,vc:vd.curV||0,sems:vd.sems||{},vn1,idVariante,skuFourn,
       cout: cout_unitaire, id: idVariante, vn1_months: vn1_months_array,
-      fc_mois: fc}); // 🚀 NOUVEAU: forecast mensuel conservé pour la vue hebdo 
+      fc_mois: fc, // 🚀 NOUVEAU: forecast mensuel conservé pour la vue hebdo 
+      equipe: estTech ? 'technique' : ''}); // 🚀 NOUVEAU: équipe Technique
     });
 
     // 🚀 NEW: Sync the Mirage supplier names to the Forecast data
@@ -966,9 +1003,10 @@ if (estExcluDashboard(nom, variante)) { KIT_IDS.add(idVariante); return; }
         prix:coutFinal,vm:vdp.moy||0,sems,idVariante:idPrev};
     }));
 
-    // 🚀 NOUVEAU: Retirer Parts / bags des prévisions (onglet Forecast + Budget)
+    // Retirer les formats "bags" des prévisions (onglet Forecast + Budget)
+    // 🚀 NOUVEAU: Les pièces (équipe Technique) sont exclues du calcul des PO et du Budget
     FORECAST = FORECAST.filter(f => !estExcluDashboard(f.nom));
-    PREVISION = PREVISION.filter(r => !estExcluDashboard(r.nom));
+    PREVISION = PREVISION.filter(r => !estExcluDashboard(r.nom) && !estTechnique(r));
 
     // Promos
     PROMOS=pT(raw['Promos']||[]).filter(r=>(r['Produit']||r['SKU']||r['Sku'])&&(r['Date Début']||r['Date Fin'])).map(r=>{
@@ -991,10 +1029,11 @@ if (estExcluDashboard(nom, variante)) { KIT_IDS.add(idVariante); return; }
         boost,prixPromo,variante};
     });
 
-    // Budget 
+    // Budget — 🚀 MODIFIÉ: uniquement les fournisseurs de Nina (hors pièces Technique),
+    // quel que soit le bouton d'équipe sélectionné
     BUDGET=[];
     for(let i=1;i<=52;i++){
-      const val=PREVISION.reduce((s,r)=>equipeMatch(r.fourn)?s+(r.sems[i]||0)*(r.prix||0):s,0);
+      const val=PREVISION.reduce((s,r)=>estBudgetNina(r.fourn, r)?s+(r.sems[i]||0)*(r.prix||0):s,0);
       BUDGET.push({label:'Semaine '+i,val:Math.round(val),sn:i});
     }
 
@@ -1251,8 +1290,8 @@ function rAlertes(){
     if(p.statut!=='rupture'&&p.demande_cumulee<=0)
       return false;   
 
-    // Team check (Nina vs Clovis)
-    if(!equipeMatch(p.fourn))
+    // Team check (Nina / Clovis / Technique)
+    if(!equipeMatch(p.fourn, p))
       return false;
 
     // Dropdown/Checkbox checks
@@ -1277,10 +1316,10 @@ function rAlertes(){
 
 
   // CALCULATE KPIs: Generate the numbers for the colorful summary boxes at the top
-  const ruptures = PRODS.filter(p => p.statut === 'rupture' && equipeMatch(p.fourn) && (p.stock + p.en_cmd) < Math.max(0, p.demande_cumulee) && !estProduitExclu(p.nom) && !estFaibleRotation(p.nom, p.solde)).length;
-  const crit = PRODS.filter(p => p.statut === 'critique' && equipeMatch(p.fourn) && (p.stock + p.en_cmd) < p.demande_cumulee && !estProduitExclu(p.nom) && !estFournisseurExclu(p.fourn) && !estFaibleRotation(p.nom, p.solde)).length;
-  const actifs = PRODS.filter(p => p.statut_produit === 'active' && equipeMatch(p.fourn)).length;
-  const pa = PRODS.filter(p => (p.statut === 'rupture' || p.statut === 'critique') && p.pareto === 'A' && p.demande_cumulee > 0 && equipeMatch(p.fourn) && (p.stock + p.en_cmd) < Math.max(0, p.demande_cumulee) && !estProduitExclu(p.nom) && !(p.statut === 'critique' && estFournisseurExclu(p.fourn)) && !estFaibleRotation(p.nom, p.solde)).length;
+  const ruptures = PRODS.filter(p => p.statut === 'rupture' && equipeMatch(p.fourn, p) && (p.stock + p.en_cmd) < Math.max(0, p.demande_cumulee) && !estProduitExclu(p.nom) && !estFaibleRotation(p.nom, p.solde)).length;
+  const crit = PRODS.filter(p => p.statut === 'critique' && equipeMatch(p.fourn, p) && (p.stock + p.en_cmd) < p.demande_cumulee && !estProduitExclu(p.nom) && !estFournisseurExclu(p.fourn) && !estFaibleRotation(p.nom, p.solde)).length;
+  const actifs = PRODS.filter(p => p.statut_produit === 'active' && equipeMatch(p.fourn, p)).length;
+  const pa = PRODS.filter(p => (p.statut === 'rupture' || p.statut === 'critique') && p.pareto === 'A' && p.demande_cumulee > 0 && equipeMatch(p.fourn, p) && (p.stock + p.en_cmd) < Math.max(0, p.demande_cumulee) && !estProduitExclu(p.nom) && !(p.statut === 'critique' && estFournisseurExclu(p.fourn)) && !estFaibleRotation(p.nom, p.solde)).length;
 
   // Inject the KPI boxes into the HTML
   document.getElementById('mg-a').innerHTML=`
@@ -1325,7 +1364,7 @@ function rStocks(){
 
   // PHASE 1: Base Filter (Team, Supplier, Search Bar)
   let baseRows = PRODS.filter(p => {
-    if (!equipeMatch(p.fourn)) return false;
+    if (!equipeMatch(p.fourn, p)) return false;
     if (fourns.length && !fourns.includes(p.fourn)) return false;
     
     // 🚀 UPGRADE: Search now looks at both Name and SKU!
@@ -1392,7 +1431,7 @@ function rVentes(){
 
   // Filter out any product that has literally 0 sales in both the current and previous year
   const rowsFiltered=PRODS.filter(p=>{
-    if(!equipeMatch(p.fourn))
+    if(!equipeMatch(p.fourn, p))
       return false;
     if(fourns.length&&!fourns.includes(p.fourn))
       return false;
@@ -1657,6 +1696,7 @@ function rReceptions(){
 
         // Step B: Filter out completed lines if history is toggled off
         const lignesValides = c.lignes.filter(l => {
+            if (!equipeMatch(c.fourn, l)) return false; // 🚀 NOUVEAU: tri des lignes par équipe (Technique)
             if (!showHistory && (l.status === 'Reçu' || l.status === 'Annulé')) return false;
             if (srch && !l.nom.toLowerCase().includes(srch)) return false;
             return true;
@@ -1668,8 +1708,8 @@ function rReceptions(){
         return { ...c, lignes: lignesValides, total: nouveauTotal, _statusClass: globalStatusClass, _isHistorical: isAllCompleted || isAllCancelled, _isLate: isLate };
     }).filter(c => {
         // Step D: Drop the entire PO if all its lines were filtered out
+        // (le filtre d'équipe est désormais appliqué ligne par ligne au Step B)
         if (c.lignes.length === 0) return false; 
-        if (!equipeMatch(c.fourn)) return false;
         if (fourn && c.fourn !== fourn) return false;
         return matchSemaine(c);
     });
@@ -1974,7 +2014,7 @@ function rPO(){
   
   if(fpo){
     const fournsAvecPO=Object.keys(PO_ENVOYES).filter(f2=>equipeMatch(f2)&&(PO_ENVOYES[f2]||[]).some(e=>e.lignes.some(l=>l.quantite>0)));
-    const activeFourns=[...new Set([...PREVISION.filter(r=>semaines.some(sw=>r.sems[sw]>0)&&equipeMatch(r.fourn)).map(r=>r.fourn).filter(Boolean),...fournsAvecPO])].sort();
+    const activeFourns=[...new Set([...PREVISION.filter(r=>semaines.some(sw=>r.sems[sw]>0)&&equipeMatch(r.fourn, r)).map(r=>r.fourn).filter(Boolean),...fournsAvecPO])].sort();
     
     // 🚀 THE FIX: Fetch everyone else to make sure no brand is ever hidden
     const autresFourns=FOURNISSEURS.filter(f=>equipeMatch(f) && !activeFourns.includes(f)).sort();
@@ -1986,7 +2026,7 @@ function rPO(){
   const fourn=fpo?.value||'';
 
   const rowsCalc=PREVISION.filter(r=>{
-    if(!equipeMatch(r.fourn))return false;
+    if(!equipeMatch(r.fourn, r))return false;
     if (fourn && r.fourn !== fourn && r.fourn !== fourn + ' (Café)') return false;
     
     // Ignore "ghost" spreadsheet rows
@@ -2046,9 +2086,9 @@ function rPO(){
   // Fusion des ajouts manuels (ruptures/critiques ajoutées depuis la bulle)
   const rowsExtra=[];
   Object.entries(PO_EXTRAS).forEach(([f,lignes])=>{
-    if(!equipeMatch(f))return;
     if (fourn && f !== fourn && f !== fourn + ' (Café)') return;
     lignes.forEach(l=>{
+      if(!equipeMatch(f, l))return; // 🚀 NOUVEAU: filtre par produit (Technique)
       if(!(l.quantite>0))return;
       const p=PRODS.find(x=>x.idVariante===l.idVariante);
       const prixExtra=(COUT_MAP[l.idVariante]||0)||COUT_MAP[normKey(l.nom)]||(PRIX_FALLBACK_ID[l.idVariante]||0);      rowsExtra.push({nom:l.nom,fourn:f,cat:p?p.pareto:'C',delai:DELAIS_MAP[f]||0,
@@ -2130,7 +2170,8 @@ function rPO(){
   const horsPO=PRODS.filter(p=>{
     if(!(p.statut==='rupture'||p.statut==='critique'))return false;
     if(!(p.demande_cumulee>0))return false;
-    if(!equipeMatch(p.fourn))return false;
+    if(!equipeMatch(p.fourn, p))return false;
+    if(estTechnique(p) && EQUIPE_FILTER!=='technique')return false; // 🚀 NOUVEAU: pièces seulement en vue Technique
     if (fourn && p.fourn !== fourn && p.fourn !== fourn + ' (Café)') return false;
     if(nomsDejaPO.has(p.nom))return false;
     if(p.en_cmd>0&&(p.stock+p.en_cmd)>=p.demande_cumulee)return false;
@@ -2420,6 +2461,7 @@ if(prods.length > 0 || (byFournHP[f] && byFournHP[f].length > 0) || dejaEnvoyesC
 // 8. FINANCIAL BUDGET (Cash Flow Prediction)
 // -----------------------------------------------------------------
 // Draws the high-level cash flow overview week by week.
+// 🚀 MODIFIÉ: Le Budget ne concerne que les fournisseurs de Nina (voir estBudgetNina)
 
 function rBudget(){
   const W=cw();
@@ -2442,8 +2484,10 @@ function toggleBudget(sn,label,total){
   SEL_BUDGET=sn;
   const byF={};
   
-  // Aggregate predicted costs by supplier
+  // Aggregate predicted costs by supplier — 🚀 Nina uniquement
   PREVISION.forEach(r=>{
+    if(!estBudgetNina(r.fourn, r))
+      return;
     const qty=r.sems[sn]||0;
     if(!qty||!r.fourn)
       return;
@@ -2453,8 +2497,10 @@ function toggleBudget(sn,label,total){
     byF[r.fourn].produits.push(r.nom);
   });
   
-  // Match with real POs if they already exist
+  // Match with real POs if they already exist — 🚀 Nina uniquement
   STOCKY.forEach(c=>{
+    if(!estBudgetNina(c.fourn))
+      return;
     if(!c.livraison||c.livraison==='—') 
       return;
     try{
@@ -2473,7 +2519,7 @@ function toggleBudget(sn,label,total){
   });
   
   const fList=Object.entries(byF).sort((a,b)=>b[1].montant-a[1].montant);
-  document.getElementById('bdet-title').textContent=label+' — détail par fournisseur';
+  document.getElementById('bdet-title').textContent=label+' — détail par fournisseur (Nina)';
   
   if(!fList.length){
     document.getElementById('bdet-body').innerHTML='<div style="text-align:center;padding:30px;color:var(--t3)">Aucune commande prévue</div>';
@@ -2717,6 +2763,10 @@ function rDormant() {
     PRODS.forEach(p => {
         // Strict Filter 1: Only look at items with physical stock
         if (p.stock <= 0) 
+          return;
+
+        // 🚀 NOUVEAU: Vue Technique = seulement les pièces. Autres vues = sans les pièces.
+        if (EQUIPE_FILTER === 'technique' ? !estTechnique(p) : estTechnique(p))
           return;
         
         // ====================================================
@@ -4283,6 +4333,7 @@ function rScanback() {
 
     PRODS.forEach(p => {
         if (!p.fourn || !p.fourn.toLowerCase().includes(targetFourn.toLowerCase().split(' ')[0])) return;
+        if (estTechnique(p)) return; // 🚀 NOUVEAU: les pièces ne comptent pas dans les scan-backs
         
         let venduMois = 0;
         let venduAnnee = 0; 
@@ -4381,10 +4432,6 @@ function rScanback() {
 // 15. QUALITÉ DE DONNÉE (MAPPING DES IDs ORPHELINS)
 // ==========================================================
 
-// ==========================================================
-// 15. QUALITÉ DE DONNÉE (MAPPING DES IDs ORPHELINS)
-// ==========================================================
-
 function rMapping() {
     const srch = (document.getElementById('s-map')?.value || '').toLowerCase();
     
@@ -4471,7 +4518,8 @@ function ouvrirModalSansEquipe() {
     if (!modal || !cont) return;
 
     // Scan unique active suppliers and filter out assigned ones
-    const sansEquipe = [...new Set(PRODS.map(p => p.fourn))]
+    // 🚀 NOUVEAU: les pièces (équipe Technique) ne comptent pas — elles n'ont pas besoin du Tableau correspondance
+    const sansEquipe = [...new Set(PRODS.filter(p => !estTechnique(p)).map(p => p.fourn))]
         .filter(f => !VENDOR_MAP[f] && f)
         .sort((a, b) => a.localeCompare(b));
 
