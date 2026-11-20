@@ -40,6 +40,7 @@
       <button class="fb eq-btn on" onclick="setEquipe('',this)" style="padding:4px 10px;font-size:12px">Tous</button>
       <button class="fb eq-btn" onclick="setEquipe('nina',this)" style="padding:4px 10px;font-size:12px">Nina</button>
       <button class="fb eq-btn" onclick="setEquipe('clovis',this)" style="padding:4px 10px;font-size:12px">Clovis</button>
+            <button class="fb eq-btn" onclick="setEquipe('clovis',this)" style="padding:4px 10px;font-size:12px">Clovis</button>
     </div>
     <button class="rbtn" onclick="loadData()">↻ Actualiser</button>
   <button class="rbtn" onclick="ouvrirModalSansEquipe()">🔍 Sans équipe</button>
@@ -217,7 +218,7 @@
     </div>
 
     <div id="v-budget" class="view">
-      <div class="sh"><span class="st">Budget — Montant par semaine</span><span class="rc" style="font-size:11px;color:var(--t3)">↗ Cliquer sur une semaine pour le détail fournisseurs</span></div>
+      <div class="sh"><span class="st">Budget Nina — Montant par semaine</span><span class="rc" style="font-size:11px;color:var(--t3)">↗ Cliquer sur une semaine pour le détail fournisseurs</span></div>
       <div class="tw"><table>
         <thead><tr><th>Semaine</th><th style="text-align:right">Montant total</th></tr></thead>
         <tbody id="tb-b"></tbody>
